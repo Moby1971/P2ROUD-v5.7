@@ -91,6 +91,9 @@ classdef proudData
         trajType = '';
         seqTrajectory;
         proudArray = [];
+        trajectory = [];
+        gradTrajectory = [];
+
 
         % Flow related
         venc = 0;
@@ -1037,6 +1040,9 @@ classdef proudData
                     app.TextMessage('Multi-slab data ...');
                     obj.multiSlab_flag = true;
                 end
+            elseif obj.NO_VIEWS == 1 && obj.NO_VIEWS_2 == 1 && obj.EXPERIMENT_ARRAY > 1000
+                obj.dataType = "3Dute";
+                app.TextMessage('3D UTE data detected ...');
             else
                 obj.dataType = "2D";
                 app.TextMessage('2D data detected ...');
@@ -1046,10 +1052,6 @@ classdef proudData
             if obj.radial_on == 1
                 obj.dataType = "2Dradial";
                 app.TextMessage('Radial data detected ...');
-                % center the echo for radial acquistions
-                % for i = 1:obj.nrCoils
-                %    obj.rawKspace{i} = center_radial_echo(app,obj.rawKspace{i});
-                % end
             end
 
             % More than 1 flip angle
@@ -1088,60 +1090,90 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = permute3Dkspace(obj)
 
-            for i=1:obj.nrCoils
+            switch obj.dataType
 
-                switch ndims(obj.rawKspace{i})
+                case "3D"
 
-                    case 3
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[3,1,2]);
+                    for i = 1:obj.nrCoils
 
-                    case 4
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[4,2,3,1]);
+                        switch ndims(obj.rawKspace{i})
 
-                    case 5
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[5,3,4,1,2]);
+                            case 3
+                                obj.rawKspace{i} = permute(obj.rawKspace{i},[3,1,2]);
 
-                    case 6
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[6,4,5,1,2,3]);
+                            case 4
+                                obj.rawKspace{i} = permute(obj.rawKspace{i},[4,2,3,1]);
 
-                end
+                            case 5
+                                obj.rawKspace{i} = permute(obj.rawKspace{i},[5,3,4,1,2]);
 
-            end
+                            case 6
+                                obj.rawKspace{i} = permute(obj.rawKspace{i},[6,4,5,1,2,3]);
 
-            % Permute data to (X, Y, Z, NR, NFA, NE, SLAB)    ---- NOT FULLY TESTED -----
-            for i=1:obj.nrCoils
+                        end
 
-                if ndims(obj.rawKspace{i})==4 && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,4,6,7]);
-                end
-                if ndims(obj.rawKspace{i})==4 && obj.multiEchoes_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,4,7]);
-                end
-                if ndims(obj.rawKspace{i})==4 && obj.multiSlab_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,7,4]);
-                end
-                if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,6,4,5,7]);
-                end
-                if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,6,5,7]);
-                end
-                if ndims(obj.rawKspace{i})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,5,6,7]);
-                end
+                    end
 
-            end
+                    % Permute data to (X, Y, Z, NR, NFA, NE, SLAB)    ---- NOT FULLY TESTED -----
+                    for i = 1:obj.nrCoils
 
-            % Flip odd echoes for multi-echo T2*
-             if contains(obj.PPL,'flash') && ~(obj.retroRecoScan_flag == true || obj.proudRecoScan_flag == true)
-                if obj.NO_ECHOES > 1
-                    for j = 2:2:obj.NO_ECHOES
-                        for i = 1:obj.nrCoils
-                            obj.rawKspace{i}(:,:,:,:,:,j,:) = flip(obj.rawKspace{i}(:,:,:,:,:,j,:),1);
+                        if ndims(obj.rawKspace{i})==4 && obj.multiFlipAngles_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,4,6,7]);
+                        end
+                        if ndims(obj.rawKspace{i})==4 && obj.multiEchoes_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,4,7]);
+                        end
+                        if ndims(obj.rawKspace{i})==4 && obj.multiSlab_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,7,4]);
+                        end
+                        if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,6,4,5,7]);
+                        end
+                        if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,6,5,7]);
+                        end
+                        if ndims(obj.rawKspace{i})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
+                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,5,6,7]);
+                        end
+
+                    end
+
+                    % Flip odd echoes for multi-echo T2*
+                    if contains(obj.PPL,'flash') && ~(obj.retroRecoScan_flag == true || obj.proudRecoScan_flag == true)
+                        if obj.NO_ECHOES > 1
+                            for j = 2:2:obj.NO_ECHOES
+                                for i = 1:obj.nrCoils
+                                    obj.rawKspace{i}(:,:,:,:,:,j,:) = flip(obj.rawKspace{i}(:,:,:,:,:,j,:),1);
+                                end
+                            end
                         end
                     end
-                end
+
+
+                case "3Dute"
+
+                    for i = 1:obj.nrCoils
+                        
+                        obj.rawKspace{i} = permute(obj.rawKspace{i},[2,1]);
+           
+                    end
+
+                    obj.NO_SAMPLES = size(obj.rawKspace{1},1);
+                    obj.NO_VIEWS = size(obj.rawKspace{1},2);
+                    obj.NO_VIEWS_2 = 1;
+                    obj.NO_ECHOES = 1;
+                    obj.NO_VIEWS_ORIG = size(obj.rawKspace{1},2);
+                    obj.NO_VIEWS_2_ORIG = 1;
+                    obj.nr_repetitions = 1;
+
+                    obj.trajType = "3Dute";
+
             end
+
+
+
+
+
 
         end % permute3DKspace
 
@@ -1795,7 +1827,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = applyTukey(obj)
 
-            filterwidth = 0.1;
+            filterWidth = 0.25;
             dimx = size(obj.rawKspace{1},1);
             dimy = size(obj.rawKspace{1},2);
             dimz = size(obj.rawKspace{1},3);
@@ -1810,14 +1842,13 @@ classdef proudData
                     end
                     [row, col] = find(ismember(kSpaceSum, max(kSpaceSum(:))));
                     for i = 1:obj.nrCoils
-                        flt = proudData.circTukey2D(dimx,dimy,row,col,filterwidth);
+                        flt = proudData.circTukey2D(dimx,dimy,row,col,filterWidth);
                         tukeyFilter(:,:,1,1,1,1) = flt;
                         obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
                     end
 
                 case "2Dradial"
 
-                    filterWidth = 0.25;
                     tmpFilter = tukeywin(dimx,filterWidth);
                     for i = 1:obj.nrCoils
                         tukeyFilter(:,1,1,1,1,1) = tmpFilter;
@@ -1833,8 +1864,17 @@ classdef proudData
                     [~,idx] = max(kSpaceSum(:));
                     [lev, row, col] = ind2sub(size(kSpaceSum),idx);
                     for i=1:obj.nrCoils
-                        flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,filterwidth);
+                        flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,filterWidth);
                         tukeyFilter(:,:,:,1,1,1) = flt;
+                        obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                    end
+
+                case "3Dute"
+
+                    tmpFilter = tukeywin(2*dimx,filterWidth/2);
+                    tmpFilter = tmpFilter(dimx+1:end);
+                    for i = 1:obj.nrCoils
+                        tukeyFilter(:,1,1,1,1,1) = tmpFilter;
                         obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
                     end
 
@@ -3188,7 +3228,7 @@ classdef proudData
 
                             % Show image
                             im = squeeze(abs(imCalib(:,:)));
-                            im = flip(permute(im,[2 1]),2);
+                            im = permute(im,[2 1]);
                             if obj.PHASE_ORIENTATION
                                 im = rot90(im,-1);
                                 daspect(app.RecoFig,[1 1 1]);
@@ -3277,7 +3317,6 @@ classdef proudData
 
             % The actual reconstruction
             if app.DensityCorrectCheckBox.Value
-                disp('d')
                 igrid = bart(app,picsCommand,'-p',density,'-t',trajPics,kSpacePics,sensitivities);
             else
                 igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
@@ -3434,6 +3473,32 @@ classdef proudData
 
 
 
+
+        % ---------------------------------------------------------------------------------
+        % Image reconstruction: CS 3D UTE with BART
+        % ---------------------------------------------------------------------------------
+        function obj = Reco3DuteCS(obj,app,flipAngle,echoTime)
+
+
+
+        end
+
+
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Image reconstruction: NUFFT 3D UTE with Matlab
+        % ---------------------------------------------------------------------------------
+        function obj = Reco3DuteNUFFT(obj,app,flipAngle,echoTime)
+
+
+
+        end
+
+
+
+
         % ---------------------------------------------------------------------------------
         % Image reconstruction: scale images
         % ---------------------------------------------------------------------------------
@@ -3442,6 +3507,7 @@ classdef proudData
             % Scale
             obj.images = round(4095*obj.images/max(obj.images(:)));
             obj.images(isnan(obj.images)) = 0;
+            obj.images(isinf(obj.images)) = 0;
 
         end % scaleImages
 

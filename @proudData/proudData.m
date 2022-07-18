@@ -89,10 +89,9 @@ classdef proudData
         gp_var_mul = [];
         gp_var_proud = [];
         trajType = '';
-        seqTrajectory;
+        seqTrajectory;              % kSpace trajectory
         proudArray = [];
-        trajectory = [];
-        gradTrajectory = [];
+        gradTrajectory = [];        % gradient calibration trajectory (3D UTE)
 
 
         % Flow related
@@ -1278,7 +1277,7 @@ classdef proudData
                 % Dimensions
                 [dimx,dimy,dimz,nrrep,nrfa,nrte] = size(kSpaceRaw);
                 kSpace = zeros(size(kSpaceRaw));
-                trajectory = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
+                trajectory2D = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
 
                 % Navigator yes or no, for RARE echo train correction
                 firsty = 0;
@@ -1322,12 +1321,12 @@ classdef proudData
                                         for x = 1:dimx
 
                                             % Fill the k-space trajectory array
-                                            trajectory(tcnt,1) = x;
-                                            trajectory(tcnt,2) = y;
-                                            trajectory(tcnt,3) = z;
-                                            trajectory(tcnt,4) = repCounter;
-                                            trajectory(tcnt,5) = faCounter;
-                                            trajectory(tcnt,6) = teCounter;
+                                            trajectory2D(tcnt,1) = x;
+                                            trajectory2D(tcnt,2) = y;
+                                            trajectory2D(tcnt,3) = z;
+                                            trajectory2D(tcnt,4) = repCounter;
+                                            trajectory2D(tcnt,5) = faCounter;
+                                            trajectory2D(tcnt,6) = teCounter;
                                             tcnt = tcnt + 1;
 
                                         end
@@ -1344,12 +1343,12 @@ classdef proudData
                                         for x = 1:dimx
 
                                             % Fill the k-space trajectory array
-                                            trajectory(tcnt,1) = x;
-                                            trajectory(tcnt,2) = y;
-                                            trajectory(tcnt,3) = z;
-                                            trajectory(tcnt,4) = repCounter;
-                                            trajectory(tcnt,5) = faCounter;
-                                            trajectory(tcnt,6) = teCounter;
+                                            trajectory2D(tcnt,1) = x;
+                                            trajectory2D(tcnt,2) = y;
+                                            trajectory2D(tcnt,3) = z;
+                                            trajectory2D(tcnt,4) = repCounter;
+                                            trajectory2D(tcnt,5) = faCounter;
+                                            trajectory2D(tcnt,6) = teCounter;
                                             tcnt = tcnt + 1;
 
                                         end
@@ -1371,7 +1370,7 @@ classdef proudData
             end
 
             % Trajectory
-            obj.seqTrajectory = trajectory;
+            obj.seqTrajectory = trajectory2D;
             obj.validTrajectory_flag = true;
 
         end % sortScannerKspaceMRD
@@ -1491,7 +1490,7 @@ classdef proudData
                 aframes(aframes==1) = 2; % allocate at least 2 frames, because preallocating 1 does not work
                 kSpace = zeros(dimx, dimy, nrSlices, aframes);
                 avgSpace = zeros(dimx, dimy, nrSlices, aframes);
-                trajectory = ones(dimx * arrayLength * nrSlices * nrRep, 7);
+                trajectoryGpVarMul = ones(dimx * arrayLength * nrSlices * nrRep, 7);
 
                 % Fill the ky-space locations
                 ky = zeros(arrayLength, 1);
@@ -1531,10 +1530,10 @@ classdef proudData
 
                                 % Fill the k-space trajectory array for viewing purposes
                                 cnt = cnt + 1;
-                                trajectory(cnt,1) = x;
-                                trajectory(cnt,2) = ky(w);
-                                trajectory(cnt,3) = slice;
-                                trajectory(cnt,4) = dynamic;
+                                trajectoryGpVarMul(cnt,1) = x;
+                                trajectoryGpVarMul(cnt,2) = ky(w);
+                                trajectoryGpVarMul(cnt,3) = slice;
+                                trajectoryGpVarMul(cnt,4) = dynamic;
 
                             end
 
@@ -1561,7 +1560,7 @@ classdef proudData
             obj.fillingSpace = fillingKSpace(:,:,:,1:frames);
 
             % Trajectory
-            obj.seqTrajectory = trajectory;
+            obj.seqTrajectory = trajectoryGpVarMul;
 
         end % sort2DKspaceMRD
 
@@ -1600,7 +1599,7 @@ classdef proudData
                 aFrames(aFrames==1)=2;
                 kSpace = zeros(dimx, dimy, dimz, aFrames); % Allocate at least 2 frames, because preallocating 1 does not work
                 avgSpace = zeros(dimx, dimy, dimz, aFrames);
-                trajectory = ones(dimx*arrayLength*nRep,7);
+                trajectory3D = ones(dimx*arrayLength*nRep,7);
 
                 % Centric or linear k-space ordering for views2
                 kzp = zeros(dimz,1);
@@ -1661,10 +1660,10 @@ classdef proudData
 
                             % Fill the k-space trajectory array
                             cnt = cnt + 1;
-                            trajectory(cnt,1) = x;
-                            trajectory(cnt,2) = ky(w);
-                            trajectory(cnt,3) = kz(w);
-                            trajectory(cnt,4) = dynamic;
+                            trajectory3D(cnt,1) = x;
+                            trajectory3D(cnt,2) = ky(w);
+                            trajectory3D(cnt,3) = kz(w);
+                            trajectory3D(cnt,4) = dynamic;
 
                         end
 
@@ -1686,7 +1685,7 @@ classdef proudData
             obj.fillingSpace = fillSpace(:,:,:,1:frames);
 
             % Trajectory
-            obj.seqTrajectory = trajectory;
+            obj.seqTrajectory = trajectory3D;
 
         end % sort3DKspaceMRD
 
@@ -1723,7 +1722,7 @@ classdef proudData
                 aFrames(aFrames==1)=2; % Allocate at least 2 frames, because preallocating 1 does not work
                 kSpace = zeros(dimx, dimy, dimz, aFrames);
                 avgSpace = zeros(dimx, dimy, dimz, aFrames);
-                trajectory = ones(dimx*dimy*dimz*nRep,7);
+                trajectoryProud = ones(dimx*dimy*dimz*nRep,7);
 
                 % Fill the ky and kz k-space locations
                 ky = zeros(length(obj.proudArray),1);
@@ -1767,10 +1766,10 @@ classdef proudData
 
                             % Fill the k-space trajectory array
                             cnt = cnt + 1;
-                            trajectory(cnt,1) = x;
-                            trajectory(cnt,2) = ky(w);
-                            trajectory(cnt,3) = kz(w);
-                            trajectory(cnt,4) = t;
+                            trajectoryProud(cnt,1) = x;
+                            trajectoryProud(cnt,2) = ky(w);
+                            trajectoryProud(cnt,3) = kz(w);
+                            trajectoryProud(cnt,4) = t;
 
                         end
 
@@ -1792,7 +1791,7 @@ classdef proudData
             obj.fillingSpace = fillingkSpace(:,:,:,1:frames);
 
             % Trajectory
-            obj.seqTrajectory = trajectory;
+            obj.seqTrajectory = trajectoryProud;
 
         end % sortProudKspaceMRD
 
@@ -3479,9 +3478,328 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = Reco3DuteCS(obj,app,flipAngle,echoTime)
 
+            % CS regularization parameters
+            LW = app.WVxyzEditField.Value;
+            TVxyz = app.TVxyzEditField.Value;
+            LR = app.LRxyzEditField.Value;
+            TVd = app.TVtimeEditField.Value;
 
+            % Original kx(readout), ky(spokes)
+            kSpaceRaw = cell(obj.nrCoils);
+            for i=1:obj.nrCoils
+                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,1,flipAngle,echoTime);
+            end
 
-        end
+            % Gradient delays from app
+            dTotal(1) = app.GxDelayEditField.Value;
+            dTotal(2) = app.GyDelayEditField.Value;
+            dTotal(3) = app.GzDelayEditField.Value;
+            offset = app.DataOffsetRadialEditField.Value;
+
+            % Data dimensions
+            [dimx, dimy] = size(kSpaceRaw{1});
+
+            % K-space radial spokes
+            dims = length(obj.gradTrajectory);
+            traj = zeros(3,dims,dimy);
+            for cnt = 1:dimy
+                traj(1,:,cnt) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                traj(2,:,cnt) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                traj(3,:,cnt) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+            end
+
+            % Check if offset is not too large, if so reduce size
+            offset(offset < 0) = 0;
+            offset(offset > (dimx - dims)) = dimx - dims;
+            app.DataOffsetRadialEditField.Value = offset;
+
+            % Resize k-space and remove offset
+            for i = 1:obj.nrCoils
+                kSpace{i}(:,:) = kSpaceRaw{i}(1+offset:dims+offset,:);
+            end
+
+            % Auto shift to maximum intensity at first data point
+            if app.CenterEchoCheckBox.Value
+                interpFactor = 16;
+                for coil = 1:obj.nrCoils
+                    for spoke = 1:dimy
+                        tmpKline1 = kSpace{coil}(:,spoke);
+                        tmpKline2 = interp(tmpKline1,interpFactor);
+                        [~,kCenter] = max(abs(tmpKline2));
+                        kShift = 1-kCenter/interpFactor;
+                        discard = ceil(abs(kShift));
+                        tmpKline1 = fraccircshift(tmpKline1,kShift);
+                        tmpKline1(end-discard:end) = 0;
+                        kSpace{coil}(:,spoke) = tmpKline1;
+                    end
+                end
+            end
+
+            % Phase correction
+            if app.PhaseCorrectCheckBox.Value
+                interpFactor = 16;
+                for coil = 1:obj.nrCoils
+                    for spoke = 1:dimy
+                        tmpKline1 = kSpace{coil}(:,spoke);
+                        kCenterPhase = angle(tmpKline1(1));
+                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                        kSpace{coil}(:,spoke) = tmpKline1;
+                    end
+                end
+            end
+
+            % kx(readout), ky(spokes), 1, dynamics, coils
+            for i = 1:obj.nrCoils
+                kSpacePics(:,:,1,:,i) = kSpace{i};
+            end
+
+            % Bart dimensions  Bart   Matlab
+            % 	READ_DIM,       0       1   x
+            % 	PHS1_DIM,       1       2   y
+            % 	PHS2_DIM,       2       3   z
+            % 	COIL_DIM,       3       4   coils
+            % 	MAPS_DIM,       4       5   sense maps
+            % 	TE_DIM,         5       6
+            % 	COEFF_DIM,      6       7
+            % 	COEFF2_DIM,     7       8
+            % 	ITER_DIM,       8       9
+            % 	CSHIFT_DIM,     9       10
+            % 	TIME_DIM,       10      11  cardiac / respiratory CINE frames
+            % 	TIME2_DIM,      11      12  dynamics
+            % 	LEVEL_DIM,      12      13
+            % 	SLICE_DIM,      13      14  slices
+            % 	AVG_DIM,        14      15
+
+            %           1      2        3        4       5
+            % Initially x, y(spokes), slices, dynamics, coils
+
+            %                                1 readout spokes
+            % Rearrange for BART             1  2  3  4  5  6  7  8  9 10 11 12 13 14
+            kSpacePics = permute(kSpacePics,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
+
+            % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
+            trajPics = permute(traj,[1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14]);
+
+            % Calibration and density correction size
+            kdim = round(dims/3);
+            if mod(kdim,2) == 1
+                kdim = kdim + 1;
+            end
+            kdim(kdim < 32) = 32;
+            kdim(kdim > dimx) = dimx;
+            calibSize = [kdim, kdim, kdim];
+            cSize = ['-d',num2str(calibSize(1)),':',num2str(calibSize(2)),':',num2str(calibSize(3))];
+            app.TextMessage(strcat('Calibration size = ',{' '},num2str(kdim)));
+     
+            % Gradient delay calibration
+            if app.GradDelayCalibrationCheckBox.Value
+
+                % K-space and trajectory sum
+                kSpacePicsSum = sum(kSpacePics,[11,12]);
+                trajPicsSum = sum(trajPics,[11,12]);
+
+                % Calibration size
+                kSize = [6,6,6];
+                kSkip = round(length(kSpacePicsSum)/2000);
+                kSkip(kSkip < 1) = 1;
+
+                % M = index in trajectory for which k-space value >= calibSize
+                [~,zm] = find(squeeze(trajPicsSum(1,:,:)) == max(trajPicsSum(:)),1,'first');
+                if isempty(zm)
+                    [~,zm] = find(squeeze(trajPicsSum(2,:,:)) == max(trajPicsSum(:)),1,'first');
+                end
+                if isempty(zm)
+                    [~,zm] = find(squeeze(trajPicsSum(3,:,:)) == max(trajPicsSum(:)),1,'first');
+                end
+                M = find(sqrt(trajPicsSum(1,:,zm).^2+trajPicsSum(2,:,zm).^2+trajPicsSum(3,:,zm).^2) >= calibSize(1,1)/2,1);
+
+                % Reduce size for gradient calibration
+                kTrajCalib = trajPicsSum(:,1:M,1:kSkip:end);
+                dataCalib = kSpacePicsSum(1,1:M,1:kSkip:end);
+                ze = squeeze(abs(dataCalib(1,1,:))) > 0;
+                kTrajCalib = kTrajCalib(:,:,ze);
+                app.TextMessage(strcat('Calibration trajectory length = ',{' '},num2str(length(kTrajCalib))));
+
+                % Interpolation to update trajectory with initial delays
+                kTrajCalib = proudData.trajInterpolation(kTrajCalib,dTotal);
+                kTraj = kTrajCalib;
+
+                % Initial image
+                dataCalib = dataCalib(:,:,ze);
+                imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTrajCalib,dataCalib);
+
+                % Initialization
+                iteration = 0;
+                incre = 10;
+                kCalib = proudData.fft3Dmri(imCalib);
+                wnRank = 0.8;
+                rank = floor(wnRank*prod(kSize));
+                app.TextMessage(strcat('Rank = ',{' '},num2str(rank)));
+
+                % Data consistency
+                y = squeeze(dataCalib);
+                xOld = kCalib;
+
+                % Prepare for manual stop
+                app.stopGradCal_flag = false;
+
+                % Reset delay values
+                dTotal = zeros(3,1);
+
+                % Calibration
+                while  (iteration<300)  && (incre>0.001) && ~app.stopGradCal_flag
+
+                    % Iteration number
+                    iteration = iteration + 1;
+                    app.TextMessage(strcat('Iteration:',{' '},num2str(iteration)));
+
+                    % Solve for X
+                    xNew = proudData.lowRankThresh3D(xOld,kSize,rank);
+                    rank = rank+0.2;
+                    rank(rank>prod(kSize)) = prod(kSize);
+
+                    % NUFFT to get updated k-space data
+                    kNew = proudData.ifft3Dmri(xNew);
+                    dataCalib = bart(app,'bart nufft',kTraj,kNew);
+                    kNew  = reshape(dataCalib,[M size(kTrajCalib,3) obj.nrCoils]);
+
+                    % Partial derivatives
+                    [dydtx,dydty,dydtz] = proudData.partialDerivative3D(app,kTraj,xNew,calibSize);
+
+                    % Direct solver
+                    dydt = [real(proudData.vec(dydtx)) real(proudData.vec(dydty)) real(proudData.vec(dydtz)) ; imag(proudData.vec(dydtx)) imag(proudData.vec(dydty)) imag(proudData.vec(dydtz))];
+                    dStep = ((dydt)'*dydt)\(dydt' * [real(proudData.vec(kNew - y)) ; imag(proudData.vec(kNew - y))]);
+                    dStep(isnan(dStep)) = 0;
+
+                    % The accumalated delays
+                    dTotal = dTotal + real(dStep);
+                    dTotal(dTotal > 10) = 10;
+                    dTotal(dTotal < -10) = -10;
+
+                    % Conversion criterium
+                    incre = norm(real(dStep));
+
+                    % Message
+                    app.TextMessage(strcat('Estimated delays:',{' '},num2str(dTotal(1)),':',num2str(dTotal(2)),':',num2str(dTotal(3))));
+
+                    % Sent gradient delay vector back to app
+                    app.GxDelayEditField.Value = double(dTotal(1));
+                    app.GyDelayEditField.Value = double(dTotal(2));
+                    app.GzDelayEditField.Value = double(dTotal(3));
+
+                    % Interpolation to update trajectory with new delays
+                    kTraj = proudData.trajInterpolation(kTrajCalib,dTotal);
+
+                    % The new image with k-space updated for gradient delays
+                    imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M size(kTrajCalib,3) obj.nrCoils]));
+
+                    % Show image
+                    im = squeeze(abs(imCalib(:,:,round(calibSize(3)/2),1)));
+                    im = flip(flip(im,1),2);
+                    if obj.PHASE_ORIENTATION
+                        im = rot90(im,-1);
+                        daspect(app.RecoFig,[1 1 1]);
+                    else
+                        daspect(app.RecoFig,[1 1 1]);
+                    end
+                    xlim(app.RecoFig, [0 size(im,2)+1]);
+                    ylim(app.RecoFig, [0 size(im,1)+1]);
+                    imshow(rot90(im),[],'Parent',app.RecoFig);
+
+                    % Calculate k-space from new image
+                    xOld = proudData.fft3Dmri(squeeze(imCalib));
+
+                end
+
+                app.GradDelayCalibrationCheckBox.Value = 0;
+
+            end % Gradient calibration
+
+            % Final gradient delay correction from optimization or values from app
+            trajPics = permute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+            trajPics = obj.trajInterpolation(trajPics,dTotal);
+            trajPics = ipermute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+
+            % Coil sensitivities from sum of all frames and dynamics
+            if obj.nrCoils > 1
+                kSpacePicsSum = sum(kSpacePics,[11,12]);
+                trajPicsSum = sum(trajPics,[11,12]);
+                ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
+                kSpacePicsSum = kSpacePicsSum(:,:,ze);
+                trajPicsSum = trajPicsSum(:,:,ze);
+                app.TextMessage('Calculating coil sensitivity maps ...');
+                lowResImage = bart(app,['nufft -i ',cSize,' -t'], trajPicsSum, kSpacePicsSum);
+                lowResKspace = bart(app,'fft -u 7', lowResImage);
+                kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dims),' 1 ',num2str(dims),' 2 ',num2str(dims)], lowResKspace);
+                sensitivities = bart(app,'ecalib -S -t0.0005 -m1', kSpaceZeroFilled);
+            else
+                sensitivities = ones(dims,dims,dims,1,1,1,1,1,1,1,1,1,1,1);
+            end
+
+            % Density correction
+            if app.DensityCorrectCheckBox.Value
+                app.TextMessage('Calculating density correction ...');
+                denseOnes = ones(size(kSpacePics));
+                denseTmp = bart(app,strcat('nufft -d',num2str(dims),':',num2str(dims),':',num2str(dims),' -a'),trajPics,denseOnes);
+                density = bart(app,'nufft ',trajPics,denseTmp);
+                density = density.^(-1/4);
+                density(isnan(density)) = 0;
+                density(isinf(density)) = 0;
+            end
+
+            % Prepare the PICS reconstruction
+            app.TextMessage('PICS reconstruction ...');
+            picsCommand = 'pics -i10 ';
+            if LW>0
+                picsCommand = [picsCommand,' -RW:7:0:',num2str(LW)];
+            end
+            if TVxyz>0
+                picsCommand = [picsCommand,' -R',obj.totalVariation,':7:0:',num2str(TVxyz)];
+            end
+            if LR>0
+                % Locally low-rank in the spatial domain
+                blockSize = round(dims/16);  % Block size
+                blockSize(blockSize<8) = 8;
+                picsCommand = [picsCommand,' -RL:7:7:',num2str(LR),' -b',num2str(blockSize)];
+            end
+            if TVd>0
+                picsCommand = [picsCommand,' -R',obj.totalVariation,':2048:0:',num2str(TVd)];
+            end
+
+            % Do the Bart reco
+            if app.DensityCorrectCheckBox.Value
+                igrid = bart(app,picsCommand,'-t',trajPics,'-p',density,kSpacePics,sensitivities);
+            else
+                igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
+            end
+
+            % Root sum of squares over all coils
+            recoImage = bart(app,'rss 8', igrid);
+
+            % Interpolate to desired dimy if requested
+            ndimx = app.XEditField.Value;
+            ndimy = app.YEditField.Value;
+            ndimz = app.ZEditField.Value;
+            [dimx, dimy, dimz] = size(obj.images);
+            if (ndimx ~= dimx) || (ndimy ~= dimy) || (ndimz ~= dimz)
+                figrid = bart(app,'fft 7',recoImage);
+                figrid = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 2 ',num2str(ndimz)],figrid);
+                recoImage = bart(app,'fft -i 7',figrid);
+            end
+
+            % Absolute value and phase image
+            imagesReg = abs(recoImage);
+            phaseImagesReg = angle(recoImage);
+
+            % Return the image objects
+            obj.images(:,:,:,1,flipAngle,echoTime) = imagesReg;
+            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
+            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
+
+            % At this moment sorting in mulitple dynamics not supported
+            app.NREditField.Value = 1;
+
+        end % Reco3DuteCS
 
 
 
@@ -3492,9 +3810,125 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = Reco3DuteNUFFT(obj,app,flipAngle,echoTime)
 
+            % Original kx(readout), ky(spokes)
+            kSpaceRaw = cell(obj.nrCoils);
+            for i=1:obj.nrCoils
+                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,1,flipAngle,echoTime);
+            end
 
+            % Gradient delays from app
+            dTotal(1) = app.GxDelayEditField.Value;
+            dTotal(2) = app.GyDelayEditField.Value;
+            dTotal(3) = app.GzDelayEditField.Value;
+            offset = app.DataOffsetRadialEditField.Value;
 
-        end
+            % Data dimensions
+            [dimx, dimy] = size(kSpaceRaw{1});
+
+            % K-space radial spokes
+            dims = length(obj.gradTrajectory);
+            traj = zeros(3,dims,dimy);
+            for cnt = 1:dimy
+                traj(1,:,cnt) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                traj(2,:,cnt) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                traj(3,:,cnt) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+            end
+
+            % Check if offset is not too large, if so reduce size
+            offset(offset < 0) = 0;
+            offset(offset > (dimx - dims)) = dimx - dims;
+            app.DataOffsetRadialEditField.Value = offset;
+
+            % Resize k-space and remove offset
+            for i = 1:obj.nrCoils
+                kSpace{i}(:,:) = kSpaceRaw{i}(1+offset:dims+offset,:);
+            end
+
+            % Auto shift to maximum intensity at first data point
+            if app.CenterEchoCheckBox.Value
+                interpFactor = 16;
+                for coil = 1:obj.nrCoils
+                    for spoke = 1:dimy
+                        tmpKline1 = kSpace{coil}(:,spoke);
+                        tmpKline2 = interp(tmpKline1,interpFactor);
+                        [~,kCenter] = max(abs(tmpKline2));
+                        kShift = 1-kCenter/interpFactor;
+                        discard = ceil(abs(kShift));
+                        tmpKline1 = fraccircshift(tmpKline1,kShift);
+                        tmpKline1(end-discard:end) = 0;
+                        kSpace{coil}(:,spoke) = tmpKline1;
+                    end
+                end
+            end
+
+            % Phase correction
+            if app.PhaseCorrectCheckBox.Value
+                interpFactor = 16;
+                for coil = 1:obj.nrCoils
+                    for spoke = 1:dimy
+                        tmpKline1 = kSpace{coil}(:,spoke);
+                        kCenterPhase = angle(tmpKline1(1));
+                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                        kSpace{coil}(:,spoke) = tmpKline1;
+                    end
+                end
+            end
+
+            % Prepare the trajectory with the gradient delay values
+            traj = obj.trajInterpolation(traj,dTotal);
+
+            % Initialization
+            maxit = 5;      % 0 or 1 for gridding, higher values for conjugate gradient
+            damp = 0;       % Tikhonov penalty on ||x||
+            weight = [];    % data weighting (optional)
+            partial = 0.5;  % Tikhobov penalty on ||imag(x))||
+
+            % Progress gauge
+            loops = obj.nrCoils;
+            app.RecoProgressGauge.Value = 0;
+
+            cnt = 1;
+
+            % Reco
+            for coil = 1:obj.nrCoils
+
+                objn = nufft_3d(traj,dims);
+
+                data = kSpace{coil}(:);
+
+                reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial));
+
+                image(:,:,:,coil) = reco;
+
+                app.RecoProgressGauge.Value = round(100*cnt/loops);
+                drawnow;
+
+                cnt = cnt + 1;
+
+            end
+
+            % Root sum of squares coil dimension
+            imageOut = rssq(image,4);
+
+            % Adjust dimensions
+            imageOut = permute(imageOut,[2 1 3]);
+
+            % Absolute value and phase image
+            imagesReg = abs(imageOut);
+            phaseImagesReg = angle(imageOut);
+
+            % Return the image objects
+            obj.images(:,:,:,1,flipAngle,echoTime) = imagesReg;
+            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
+            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
+
+            % At this moment the datasize will be that of the original data
+            app.XEditField.Value = size(obj.images,1);
+            app.YEditField.Value = size(obj.images,2);
+            app.ZEditField.Value = size(obj.images,3);
+            app.NREditField.Value = 1;
+
+        end % Reco3DuteNUFFT
 
 
 
@@ -4391,7 +4825,7 @@ classdef proudData
             [sx,sy,sz,~] = size(Xold);
             tmp = proudData.im2row3D(Xold,kSize);
             [tsx,tsy,Nc] = size(tmp);
-            A = reshape(obj.im2row3D(Xold,kSize),tsx,tsy*Nc);
+            A = reshape(proudData.im2row3D(Xold,kSize),tsx,tsy*Nc);
 
             [U,S,V] = svd(A,'econ');
             A = U(:,keep)*S(keep,keep)*V(:,keep)';

@@ -2172,14 +2172,14 @@ classdef proudData
                 end
 
                 % Rearrange to correct orientation: x, y, slices, dynamics,
-                imageReg = reshape(imageReg,[1,dimy,dimx,dimd,dimz,1]);
-                phaseImageReg = reshape(phaseImageReg,[1,dimy,dimx,dimd,dimz,1]);
+                imageReg = reshape(imageReg,[dimy,dimx,dimd,dimz]);
+                phaseImageReg = reshape(phaseImageReg,[dimy,dimx,dimd,dimz]);
 
-                imagesOut = permute(imageReg,[3,2,5,4,1,6]);
-                imagesOut = flip(flip(imagesOut,2),3);
+                imagesOut = permute(imageReg,[1,2,4,3]);
+                imagesOut = flip(imagesOut,1);
 
-                phaseImagesOut = permute(phaseImageReg,[3,2,5,4,1,6]);
-                phaseImagesOut = flip(flip(phaseImagesOut,2),3);
+                phaseImagesOut = permute(phaseImageReg,[1,2,4,3]);
+                phaseImagesOut = flip(phaseImagesOut,1);
 
                 % Return the images object
                 obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2321,14 +2321,14 @@ classdef proudData
                 end
 
                 % Orientations are flipped
-                imagesOut = flip(flip(imagesOut,1),3);
-                phaseImagesOut = flip(flip(phaseImagesOut,1),3);
+                imagesOut = flip(permute(imagesOut,[2 1 3 4]),2);
+                phaseImagesOut = flip(permute(phaseImagesOut,[2 1 3 4]),2);
 
                 % There seems to be a 1 pixel shift with this reco, correct for this:
                 imagesOut = circshift(imagesOut,-1,1);
-                imagesOut = circshift(imagesOut,-1,2);
+                imagesOut = circshift(imagesOut,1,2);
                 phaseImagesOut = circshift(phaseImagesOut,-1,1);
-                phaseImagesOut = circshift(phaseImagesOut,-1,2);
+                phaseImagesOut = circshift(phaseImagesOut,1,2);
 
                 % Return the images object
                 obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2450,8 +2450,8 @@ classdef proudData
             end
 
             % Flip 2nd dimension
-            imagesOut = flip(imagesOut,2);
-            phaseImagesOut = flip(phaseImagesOut,2);
+            imagesOut = flip(permute(imagesOut,[2 1 3 4]),1);
+            phaseImagesOut = flip(permute(phaseImagesOut,[2 1 3 4]),1);
 
             % Return the images object
             obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;

@@ -1847,12 +1847,14 @@ classdef proudData
                     end
 
                 case "2Dradial"
-
-                    tmpFilter = tukeywin(dimx,filterWidth);
-                    for i = 1:obj.nrCoils
-                        tukeyFilter(:,1,1,1,1,1) = tmpFilter;
-                        obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                    end
+            
+                    % Probably better to apply after center shift
+                
+                    % tmpFilter = tukeywin(dimx,filterWidth);
+                    % for i = 1:obj.nrCoils
+                    %   tukeyFilter(:,1,1,1,1,1) = tmpFilter;
+                    %   obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                    % end
 
                 case "3D"
 
@@ -3013,6 +3015,14 @@ classdef proudData
                     end
                 end
             end
+
+            % Apply Tukey filter (again, after shift)
+            filterWidth = 0.25;
+            tmpFilter = tukeywin(dimx,filterWidth);
+            for coil = 1:obj.nrCoils
+                tukeyFilter(:,1,1,1) = tmpFilter;
+                kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
+            end
         
             % Requested sizes
             dimx = app.XEditField.Value;
@@ -3178,7 +3188,7 @@ classdef proudData
                         app.stopGradCal_flag = false;
 
                         % Iterative method with Bart
-                        while  (iteration<300) && (incre>0.0001) && ~app.stopGradCal_flag
+                        while  (iteration<300) && (incre>0.001) && ~app.stopGradCal_flag
 
                             % Iteration number
                             iteration = iteration + 1;
@@ -3187,7 +3197,8 @@ classdef proudData
                             % Solve for X
                             rank(rank>prod(kSize)) = prod(kSize);
                             xNew = obj.lowRankThresh2D(xOld,kSize,rank);
-                            rank = rank+0.2;
+                            % rank = rank+0.05;
+                            % app.TextMessage(strcat('Rank :',{' '},num2str(rank)));
 
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
@@ -3215,8 +3226,8 @@ classdef proudData
                             app.TextMessage(strcat('Estimated delays:',{' '},num2str(dTotal(1)),':',num2str(dTotal(2))));
 
                             % Sent gradient delay vector back to app
-                            app.GxDelayEditField.Value = double(dTotal(1));
-                            app.GyDelayEditField.Value = double(dTotal(2));
+                            app.GxDelayEditField.Value = double(round(dTotal(1),5));
+                            app.GyDelayEditField.Value = double(round(dTotal(2),5));
                             app.GzDelayEditField.Value = 0;
 
                             % Interpolation to update trajectory with new delays
@@ -3390,6 +3401,14 @@ classdef proudData
                         end
                     end
                 end
+            end
+
+            % Apply Tukey filter (again, after shift)
+            filterWidth = 0.25;
+            tmpFilter = tukeywin(dimx,filterWidth);
+            for coil = 1:obj.nrCoils
+                tukeyFilter(:,1,1,1) = tmpFilter;
+                kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
             end
         
             % Make the radial trajectory 0-180 degrees

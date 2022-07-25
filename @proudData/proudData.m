@@ -1,6 +1,10 @@
 classdef proudData
 
-    % Data and parameter class for p2roud app
+    % Data and parameter class for P2ROUD app
+    %
+    % Gustav Strijkers
+    % g.j.strijkers@amsterdamumc.nl
+    % July 2022
 
     properties
 
@@ -131,7 +135,7 @@ classdef proudData
 
 
     % -----------------------------------------------------------------
-    % Methods
+    % Public methods
     % -----------------------------------------------------------------
     %
     % obj = proudData()
@@ -169,13 +173,13 @@ classdef proudData
     % obj = calcFlow(obj)
     % 
     %
-    % Static Methods:
+    % -----------------------------------------------------------------
+    % Static methods
+    % -----------------------------------------------------------------
     %
     % output = circTukey2D(dimy,dimx,row,col,filterwidth)
     % output = circTukey3D(dimz,dimy,dimx,lev,row,col,filterwidth)
     % y = gauss(x,s,m)
-    % y = fft2r(x)
-    % y = fft3r(x)
     % [im,dim,par,unsortedkspace] = importMRD(filename, reordering1, reordering2)
     % struct = jcampread(filename)
     % output = fracCircShift(input,shiftsize)
@@ -2427,7 +2431,7 @@ classdef proudData
                     % FFT
                     imageTmp = zeros(ndimx,ndimy,obj.nrCoils);
                     for coil = 1:obj.nrCoils
-                        imageTmp(:,:,coil) = proudData.fft2r(squeeze(kdatai(:,:,coil)));
+                        imageTmp(:,:,coil) = proudData.fft2Dmri(squeeze(kdatai(:,:,coil)));
                     end
 
                     % Sum of squares
@@ -2913,7 +2917,7 @@ classdef proudData
                     % FFT
                     imageIm = zeros(ndimx,ndimy,ndimz,obj.nrCoils);
                     for coil = 1:obj.nrCoils
-                        imageIm(:,:,:,coil) = proudData.fft3r(squeeze(kdatai(:,:,:,coil)));
+                        imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kdatai(:,:,:,coil)));
                     end
 
                     % Root sum of squares
@@ -4037,7 +4041,7 @@ classdef proudData
                         for j = 1:NR
                             for k = 1:NFA
                                 for w = 1:NE
-                                    kSpace(:,:,i,j,k,w) = proudData.fft2r(squeeze(im(:,:,i,j,k,w)));
+                                    kSpace(:,:,i,j,k,w) = proudData.fft2Dmri(squeeze(im(:,:,i,j,k,w)));
                                 end
                             end
                         end
@@ -4059,7 +4063,7 @@ classdef proudData
                     for j = 1:NR
                         for k = 1:NFA
                             for w = 1:NE
-                                kSpace(:,:,:,j,k,w) = proudData.fft3r(squeeze(im(:,:,:,j,k,w)));
+                                kSpace(:,:,:,j,k,w) = proudData.fft3Dmri(squeeze(im(:,:,:,j,k,w)));
                             end
                         end
                     end
@@ -4347,54 +4351,12 @@ classdef proudData
         function y = gauss(x,s,m)
 
             % GAUSS  Gaussian function
-            %
-            %  Y = GAUSS( X , S , M )
-            %
-            %  Y = EXP(-(X-M).^2./S.^2)./(sqrt(2*pi).*S);
-            %
-            %  sum( Y(X=(-inf..inf)) * dX ) = 1/sqrt(2)
-
-            Nin = nargin;
-
-            if Nin < 2
-                s = 1;
-            end
-            if Nin < 3
-                m = 0;
-            end
 
             x = ((x-m).^2) ./ (s.^2);
-
             s = sqrt(2*pi) * s;
-
             y = exp(-x) ./ s;
 
-        end
-
-
-
-        % ---------------------------------------------------------------------------------
-        % 2D FFT
-        % ---------------------------------------------------------------------------------
-        function y = fft2r(x)
-
-            y = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
-            y = fftshift(ifft(fftshift(y,2),[],2),2)*sqrt(size(x,2));
-
-        end
-
-
-
-        % ---------------------------------------------------------------------------------
-        % 3D FFT
-        % ---------------------------------------------------------------------------------
-        function y = fft3r(x)
-
-            y = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
-            y = fftshift(ifft(fftshift(y,2),[],2),2)*sqrt(size(x,2));
-            y = fftshift(ifft(fftshift(y,3),[],3),3)*sqrt(size(x,3));
-
-        end
+        end % gauss
 
 
 

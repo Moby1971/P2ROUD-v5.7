@@ -9,125 +9,124 @@ classdef proudData
     properties
 
         % Data
-        rawKspace = {};
-        unsKspace = {};
-        mrdKspace = [];
-        images = [];
-        phaseImages = [];
-        phaseImagesOrig = [];
-        flowImages = [];
-        mask = [];
-        nsaSpace = [];
-        fillingSpace = [];
-        pixelSize = [];
-        mrdFooter;
-        newMrdFooter;
-        rprFile;
-        newRprFile;
-        totalVariation = 'T';
+        rawKspace = {};                                     % raw k-space data
+        unsKspace = {};                                     % unsorted k-space data
+        mrdKspace = [];                                     % k-space data from MRD file
+        images = [];                                        % magnitude images
+        phaseImages = [];                                   % phase images
+        phaseImagesOrig = [];                               % original phase images (without unwrapping)
+        flowImages = [];                                    % flow images
+        mask = [];                                          % image mask
+        nsaSpace = [];                                      % number of signal averages per k-point
+        fillingSpace = [];                                  % filling (1 = yes / 0 = no) per k-point
+        pixelSize = [];                                     % pixel size (mm)
+        mrdFooter;                                          % original MRD footer data
+        newMrdFooter;                                       % new MRD footer data for export
+        rprFile;                                            % original RPR file data
+        newRprFile;                                         % new RPR file data for export
+        totalVariation = 'T';                               % total variation  (T) or total generalized variation (G)
 
         % Filenames
         filename;
         PPL = 'unknown';
 
-        % Sequence parameters
-        dataType = '2D';
-        totalAcqTime = 0;
-        NO_SAMPLES = 1;
-        NO_SAMPLES_ORIG = 1;
-        NO_VIEWS = 1;
-        NO_VIEWS_ORIG = 1;
-        NO_VIEWS_2 = 1;
-        NO_VIEWS_2_ORIG = 1;
-        DISCARD = 0;
-        EXPERIMENT_ARRAY = 1;
-        oversample = 0;
-        nr_repetitions = 1;
-        NO_AVERAGES = 1;
-        NO_SLICES = 1;
-        NO_ECHOES = 1;
-        nav_on = 0;
-        VIEWS_PER_SEGMENT = 1;
-        SLICE_THICKNESS = 1;
-        SLICE_SEPARATION = 1;
-        SLICE_INTERLEAVE = 1;
-        slab_ratio = 100;
-        r_angle_var;
-        p_angle_var;
-        s_angle_var;
-        nr_coils = 1;
-        nrCoils = 1;
-        FOV = 30;
-        PHASE_ORIENTATION = 0;
-        FOVf = 8;
-        aspectratio = 1;
-        alpha = 20;
-        te = 2;
-        te_us = 0;
-        TE;
-        tr = 10;
-        tr_extra_us = 0;
-        TR;
-        ti = 1000;
-        VFA_angles = [];
-        VFA_size = 0;
-        flipAngleArray = [];
-        frame_loop_on = 0;
-        radial_on = 0;
-        slice_nav = 0;
-        date;
-        pixelshift1 = 0;
-        pixelshift2 = 0;
-        coil_scaling = 1;
-        coilSensitivities = [1 1 1 1 1 1 1 1];
-        scanner = 'MRS';
-        field_strength = 7;
-        acqdur = 0;
-        timeperframe = 0;
-        nr_frames = 1;
+        % Sequence parameters   
+        dataType = '2D';                                    % data type (2D, 2Dms, 3D, 3Dute, 2Dradial)
+        totalAcqTime = 0;                                   % total acquisition time
+        NO_SAMPLES = 1;                                     % number of samples (readout)
+        NO_SAMPLES_ORIG = 1;                                % original number of samples (readout)
+        NO_VIEWS = 1;                                       % number of views1 (phase encoding 2)
+        NO_VIEWS_ORIG = 1;                                  % original number of views1 (phase encoding 2)
+        NO_VIEWS_2 = 1;                                     % number of views2 (phase encoding 2)
+        NO_VIEWS_2_ORIG = 1;                                % original number of views2 (phase encoding 2)
+        DISCARD = 0;                                        % number of discarded readout points
+        EXPERIMENT_ARRAY = 1;                               % number of experiments/repetitions
+        oversample = 0;                                     % oversample factor in readout direction
+        nr_repetitions = 1;                                 % number of repetitions
+        NO_AVERAGES = 1;                                    % number of averages
+        NO_SLICES = 1;                                      % number of slices
+        NO_ECHOES = 1;                                      % number of echoes
+        nav_on = 0;                                         % navigator on (1) / off (0)
+        VIEWS_PER_SEGMENT = 1;                              % views per segment / interleaved scanning
+        SLICE_THICKNESS = 1;                                % slice thickness (mm)
+        SLICE_SEPARATION = 1;                               % slice separation (mm)
+        SLICE_INTERLEAVE = 1;                               % slice interleave type
+        slab_ratio = 80;                                    % slab ratio (oversampling)
+        r_angle_var;                                        % X angle
+        p_angle_var;                                        % Y angle
+        s_angle_var;                                        % Z angle
+        nr_coils = 1;                                       % MRD file number of coils
+        nrCoils = 1;                                        % number of coils
+        FOV = 30;                                           % field of view (mm)
+        PHASE_ORIENTATION = 0;                              % phase orientation 1 = hor. 0 = vert.
+        FOVf = 8;                                           % field-of-view factor aspect ratio = FOVf/8
+        aspectratio = 1;                                    % image aspect ratio
+        alpha = 20;                                         % flip angle
+        te = 2;                                             % integer echo time (ms)
+        te_us = 0;                                          % additional echo time (us)
+        TE;                                                 % echo time TE = te + te_us
+        tr = 10;                                            % integer TR time (ms)
+        tr_extra_us = 0;                                    % additional TR time (us)
+        TR;                                                 % repitition time TR = tr + tr_extra_us
+        ti = 1000;                                          % inversion time
+        VFA_angles = [];                                    % MRD file flip angles
+        VFA_size = 0;                                       % flip angle array size (0 = no array = 1 flip angle)
+        flipAngleArray = [];                                % array of flip angles
+        frame_loop_on = 0;                                  % CINE imaging on (1) / off (0)
+        radial_on = 0;                                      % radial scanning on (1) / off (0)
+        slice_nav = 0;                                      % slice navigator on (1) / off (0)
+        date;                                               % scan date
+        pixelshift1 = 0;                                    % image shift in views direction
+        pixelshift2 = 0;                                    % image shift in views2 direction
+        coil_scaling = 1;                                   % MRD file coil scaling (not used)
+        coilSensitivities = [1 1 1 1 1 1 1 1];              % coil sensitiviy calibration
+        scanner = 'MRS';                                    % scanner type (MR Solutions)
+        field_strength = 7;                                 % field strength (7T)
+        acqdur = 0;                                         % acquisition duration
+        timeperframe = 0;                                   % time per CINE frame
+        nr_frames = 1;                                      % number of CINE frames
 
         % K-space trajectory related
-        pe1_order = 0;
-        pe2_centric_on = 0;
-        pe2_traj = 0;
-        gp_var_mul = [];
-        gp_var_proud = [];
-        trajType = '';
-        seqTrajectory;              % kSpace trajectory
-        proudArray = [];
-        gradTrajectory = [];        % gradient calibration trajectory (3D UTE)
+        pe1_order = 0;                                      % views2 phase-encoding ordering
+        pe2_centric_on = 0;                                 % views2 centric ordering true (1) / false (0)
+        pe2_traj = 0;                                       % views2 trajectory type
+        gp_var_mul = [];                                    % MRD phase encoding array
+        gp_var_proud = [];                                  % P2ROUD k-space phase-encoding array (legacy)
+        trajType = '';                                      % trajectory type (3Dute, 2Dradial)
+        seqTrajectory;                                      % k-space trajectory
+        proudArray = [];                                    % P2ROUD sequence array
+        gradTrajectory = [];                                % gradient calibration trajectory (3D UTE)
 
 
         % Flow related
-        venc = 0;
-        vencAmp = [];
-        flowCompOn = 0;
-        vencTable = [];
-        flowFnc = [];
-
+        venc = 0;                                           % flow encoding VENC
+        vencAmp = [];                                       % MRD file VENC
+        flowCompOn = 0;                                     % flow compensation on (1) or off (0)
+        vencTable = [];                                     % VENC orientation table
+   
         % Navigator related
-        no_samples_nav = 10;
-        no_samples_discard = 35;
+        no_samples_nav = 10;                                % number of navigator samples
+        no_samples_discard = 35;                            % number of points discarded after navigator
 
         % Segmentation related
-        threshold = 0;
+        threshold = 0;                                      % segmentation threshold
         
         % Flags
-        validFile_flag = false;
-        validReco_flag = false;
-        validVenc_flag = false;
-        validFlow_flag = false;
-        validMask_flag = false;
-        multiEchoes_flag = false;
-        multiRepetitions_flag = false;
-        multiFlipAngles_flag = false;
-        multiCoil_flag = false;
-        multiSlab_flag = false;
-        validTrajectory_flag = false
-        rprFile_flag = false;
-        proudRecoScan_flag = false;
-        retroRecoScan_flag = false;
-        coilActive_flag = [1 1 1 1 1 1 1];
+        validFile_flag = false;                             % valid MRD file true/false
+        validReco_flag = false;                             % valid reconstruction true/false
+        validVenc_flag = false;                             % valid VENC values true/false
+        validFlow_flag = false;                             % valid flow images true/false
+        validMask_flag = false;                             % valid mask true/false
+        multiEchoes_flag = false;                           % multiple echoes true/false
+        multiRepetitions_flag = false;                      % multiple repetitions true/false
+        multiFlipAngles_flag = false;                       % multiple flip angles true/false
+        multiCoil_flag = false;                             % multiple receiver coils true/false
+        multiSlab_flag = false;                             % multiple 3D slabs true/false
+        validTrajectory_flag = false                        % valid k-space trajectory true/false
+        rprFile_flag = false;                               % RPR file data available true/false
+        proudRecoScan_flag = false;                         % MRD data from P2ROUD app true/false
+        retroRecoScan_flag = false;                         % MRD data from Retrospective app true/false
+        coilActive_flag = [1 1 1 1 1 1 1];                  % active coil (1 = yes / 0 = no)
 
 
     end % properties
@@ -217,6 +216,8 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = setNumberOfCoils(obj, app, flist)
 
+            % Determine whether data is from multiple receiver coils
+
             obj.nrCoils = length(flist);
             if obj.nrCoils>1
                 obj.multiCoil_flag = true;
@@ -236,29 +237,43 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = readProudData(obj, app, mrdfile, flist)
 
+            % Read the k-space data from the MRD file
+
             obj.proudRecoScan_flag = false;
             obj.retroRecoScan_flag = false;
             obj.validFile_flag = true;
 
-            obj.rawKspace = {};
-            obj.unsKspace = {};
+            obj.rawKspace = {};    % raw k-space data already (pre-)sorted by importMRD function
+            obj.unsKspace = {};    % unsorted k-space data
+
+            % Loop over all coils
             for i=1:obj.nrCoils
+            
                 app.TextMessage(strcat('Loading coil #',num2str(i)));
+                
                 if contains(mrdfile,'p2roud')
+                    % Data previously generated by the P2ROUD app
                     obj.proudRecoScan_flag = true;
                     [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
                 elseif contains(mrdfile,'retro')
+                    % Data generated by the retrospective app
                     obj.retroRecoScan_flag = true;
                     [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
                 else
+                    % All other scanner-generated data
                     [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','cen');
                 end
+              
                 if isfield(parameters,'pe2_centric_on')
+                    % If views2 direction turns out to be linearly ordered re-read the data
                     if parameters.pe2_centric_on == 0
                         [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
                     end
                 end
+
             end
+
+            % Assign the MRD footer variables to object variables
 
             if isfield(parameters,'filename')
                 obj.filename = parameters.filename;
@@ -750,8 +765,6 @@ classdef proudData
             end
 
             % Fast forward to beginning of footer
-%           fseek(fid,512,'bof');
-
             fseek(fid,400,'bof');
             num2read = no_expts*no_echoes*no_slices*no_views_2*no_views*no_samples*iscomplex;
             fseek(fid,num2read*datasize,'cof');
@@ -771,8 +784,11 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = makeMrdFooter(obj, par)
 
+            % Makes a new MRD file footer by replacing old values with new ones
+
             inputfooter = obj.mrdFooter;
 
+            % Search parameters
             parameters = {':NO_SAMPLES no_samples, ',':NO_VIEWS no_views, ',':NO_VIEWS_2 no_views_2, ', ...
                 ':NO_ECHOES no_echoes, ',':EXPERIMENT_ARRAY no_experiments, ',':NO_AVERAGES no_averages, ', ...
                 ':VAR pe1_order, ',':VAR pe2_centric_on, ',':VAR slice_nav, ',':VAR radial_on, ', ...
@@ -783,6 +799,7 @@ classdef proudData
 
                 };
 
+            % Replacement values
             replacepars = {par.NoSamples,par.NoViews,par.NoViews2, ...
                 par.NoEchoes,par.NoExperiments,par.NoAverages, ...
                 par.peorder,par.pe2_centric_on,par.slicenav,par.radialon, ...
@@ -793,17 +810,21 @@ classdef proudData
 
                 };
 
+            % Loop over all parameter names
             for i = 1:length(parameters)
 
                 txt = parameters{i};
                 var = replacepars{i};
 
+                % Find the position of the parameter
                 pos = strfind(inputfooter,txt);
 
                 if ~isempty(pos)
                     
+                    % Determine which part should be replaced
                     oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),char(13))-1;
 
+                    % Slice thickness is a special case
                     if contains(txt,'SLICE_THICKNESS')
                         commapos = [];
                         commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+6),' ');
@@ -811,14 +832,16 @@ classdef proudData
                         pos = pos+commapos;
                     end
                  
+                    % Replace the values with the new ones
                     newtext = [num2str(var),'     '];
                     newtext = newtext(1:6);
-
                     inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+  
                 end
 
             end
 
+            % Return the new MRD footer object
             obj.newMrdFooter  = inputfooter;
 
         end % makeMrdFooter
@@ -830,6 +853,8 @@ classdef proudData
         % Read RPR 
         % ---------------------------------------------------------------------------------
         function obj = readRprFile(obj, app, fn)
+
+            % Read the RPR file data
 
             try
                 app.TextMessage('Reading RPR file ...');
@@ -855,6 +880,8 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = writeToRprFile(obj, filename)
 
+            % Write the new RPR file to disk
+
             fid = fopen(filename,'wb');
             fwrite(fid,obj.newRprFile,'int8');
             fclose(fid);
@@ -869,8 +896,13 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = makeRprFile(obj, par)
 
+            % Makes a new RPR file by replacing old values with new ones
+            % The RPR file will be used by the MR Solutions software to make a reconstruction 
+            % and import the data into preclinical
+
             inputrpr = obj.rprFile;
 
+            % Parameter names
             parameters = {
                 ':EDITTEXT LAST_ECHO ',':EDITTEXT MAX_ECHO ', ...
                 ':EDITTEXT LAST_EXPT ',':EDITTEXT MAX_EXPT ', ...
@@ -882,6 +914,7 @@ classdef proudData
                 ':RADIOBUTTON VIEW_ORDER_1',':RADIOBUTTON VIEW_ORDER_2'
                 };
 
+            % New parameter values
             replacepars = {par.NoEchoes,par.NoEchoes, ...
                 par.NoExperiments, par.NoExperiments, ...
                 par.NoSamples, par.NoSamples, par.NoSamples, ...
@@ -892,24 +925,27 @@ classdef proudData
                 par.View1order, par.View2order
                 };
 
+            % Loop over all parameters
             for i = 1:length(parameters)
 
                 txt = parameters{i};
                 var = replacepars{i};
 
+                % Find the position of the parameter name
                 pos = strfind(inputrpr,txt);
 
                 if ~isempty(pos)
 
+                    
                     if ~isstring(var)
-
+                        % Numeric values
                         oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
                         newtext = [num2str(var),'     '];
                         newtext = newtext(1:6);
                         inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
 
                     else
-
+                        % String-based values
                         oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
                         newtext = strcat(" ",var,"           ");
                         newtext = extractBefore(newtext,12);
@@ -921,6 +957,7 @@ classdef proudData
 
             end
 
+            % Return the new RPR file object
             obj.newRprFile = inputrpr;
 
         end % makeRprFile
@@ -950,8 +987,8 @@ classdef proudData
             % data: multidimensional, complex float, with dimensions arranged
             % dimensions: structure
 
-            data = obj.mrdKspace;
-            footer = obj.newMrdFooter;
+            data = obj.mrdKspace;               % New MRD data
+            footer = obj.newMrdFooter;          % New MRD footer
 
             % Get dimensions of the actual image data
             if (size(data,1)~=parameters.NoSamples)
@@ -1018,10 +1055,10 @@ classdef proudData
 
             fwrite(fid1,char(13));
 
-            % write the footer
+            % Write the footer
             fwrite(fid1,footer,'int8');
 
-            % close file
+            % Close file
             fclose(fid1);
 
         end % writeDataToMrd
@@ -1034,25 +1071,31 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = setDataParameters(obj, app)
 
-            % 2D or 3D data
+            % Determine which type of k-space data is available
+
             if obj.NO_VIEWS_2 > 1
+                % 3D data
                 obj.dataType = "3D";
                 app.TextMessage('3D data detected ...');
                 obj.multiSlab_flag = false;
                 if obj.NO_SLICES > 1
+                    % Multiple slabs which need to be stitched together
                     app.TextMessage('Multi-slab data ...');
                     obj.multiSlab_flag = true;
                 end
             elseif obj.NO_VIEWS == 1 && obj.NO_VIEWS_2 == 1 && obj.EXPERIMENT_ARRAY > 1000
+                % 3D UTE data
                 obj.dataType = "3Dute";
                 app.TextMessage('3D UTE data detected ...');
             else
+                % Regular 2D multi-slice data
                 obj.dataType = "2D";
                 app.TextMessage('2D data detected ...');
             end
 
             % Check for radial data acquisition
             if obj.radial_on == 1
+                % 2D radial acquisition
                 obj.dataType = "2Dradial";
                 app.TextMessage('Radial data detected ...');
             end
@@ -1075,9 +1118,11 @@ classdef proudData
             % More than 1 repetition
             if obj.EXPERIMENT_ARRAY > 1
                 if obj.multiFlipAngles_flag
+                    % Multiple repetitions = multiple flip angles
                     obj.EXPERIMENT_ARRAY = obj.EXPERIMENT_ARRAY/obj.VFA_size;
                 end
                 if obj.EXPERIMENT_ARRAY > 1
+                    % Regular multiple repetition experiment
                     obj.multiRepetitions_flag = true;
                     app.TextMessage('Multi-dynamic data detected ...');
                 end
@@ -1092,6 +1137,12 @@ classdef proudData
         % Permute 3D k-space data
         % ---------------------------------------------------------------------------------
         function obj = permute3Dkspace(obj)
+
+            % The P2ROUD app sorts the 3D data and images into the following order:
+            %
+            % data = X, Y, Z, dynamics, flip-angles, echoes, slabs
+            %
+            % -----------------------------------------------------------------------------
 
             switch obj.dataType
 
@@ -1156,9 +1207,9 @@ classdef proudData
                 case "3Dute"
 
                     for i = 1:obj.nrCoils
-                        
+
                         obj.rawKspace{i} = permute(obj.rawKspace{i},[2,1]);
-           
+
                     end
 
                     obj.NO_SAMPLES = size(obj.rawKspace{1},1);
@@ -1172,11 +1223,6 @@ classdef proudData
                     obj.trajType = "3Dute";
 
             end
-
-
-
-
-
 
         end % permute3DKspace
 
@@ -1204,6 +1250,7 @@ classdef proudData
 
                     case 4
                         if obj.NO_SLICES > 1
+                            disp(size(obj.rawKspace{1}))
                             obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,2,1]);
                         else
                             obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,5,1,2]);
@@ -1958,31 +2005,6 @@ classdef proudData
                 kSpacePicsSum = sum(kSpacePics,[11,12]);
                 sensitivities = bart(app,'ecalib -S -I -a', kSpacePicsSum);      % ecalib with softsense
 
-                % Pics reconstuction
-                picsCommand = 'pics -S';
-                if LW>0
-                    picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
-                end
-                if TVxy>0
-                    picsCommand = [picsCommand,' -RT:6:0:',num2str(TVxy)];
-                end
-                if LR>0
-                    % Locally low-rank in the spatial domain
-                    blocksize = round(max([dimx dimy])/16);  % Block size
-                    app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
-                    picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
-                end
-                if TVd>0
-                    picsCommand = [picsCommand,' -RT:1056:0:',num2str(TVd)];
-                end
-                imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                % Sum of squares reconstruction
-                imageReg = abs(bart(app,'rss 16', imageTmp));
-                
-                % Phase images
-                phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
-
             end
 
             if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
@@ -1993,32 +2015,32 @@ classdef proudData
                     sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
                 end
 
-                % Pics reconstuction
-                picsCommand = 'pics -S';
-                if LW>0
-                    picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
-                end
-                if TVxy>0
-                    picsCommand = [picsCommand,' -RT:6:0:',num2str(TVxy)];
-                end
-                if LR>0
-                    % Locally low-rank in the spatial domain
-                    blocksize = round(max([dimx dimy])/16);  % Block size
-                    app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
-                    picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
-                end
-                if TVd>0
-                    picsCommand = [picsCommand,' -RT:1056:0:',num2str(TVd)];
-                end
-                imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                % Modulus image
-                imageReg = abs(imageTmp);
-
-                % Phase images
-                phaseImageReg = angle(imageTmp);
-
             end
+
+            % Pics reconstuction
+            picsCommand = 'pics -S';
+            if LW>0
+                picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
+            end
+            if TVxy>0
+                picsCommand = [picsCommand,' -R',obj.totalVariation,':6:0:',num2str(TVxy)];
+            end
+            if LR>0
+                % Locally low-rank in the spatial domain
+                blocksize = round(max([dimx dimy])/16);  % Block size
+                app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
+                picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
+            end
+            if TVd>0
+                picsCommand = [picsCommand,' -R',obj.totalVariation,':1056:0:',num2str(TVd)];
+            end
+            imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+
+            % Sum of squares reconstruction
+            imageReg = abs(bart(app,'rss 16', imageTmp));
+
+            % Phase images
+            phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
 
             % Rearrange to correct orientation: x, y, slices, dynamics, flip-angle, TE (cine)
             imageReg = permute(imageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
@@ -2096,8 +2118,8 @@ classdef proudData
                 % 	SLICE_DIM,      14  slices
                 % 	AVG_DIM,        15
 
-                %                             0  1  2  3  4  5  6  7  8  9  10 11 12 13
-                %                             1  2  3  4  5  6  7  8  9  10 11 12 13 14
+                %                            0  1  2  3  4  5  6  7  8  9  10 11 12 13
+                %                            1  2  3  4  5  6  7  8  9  10 11 12 13 14
                 kSpacePics = permute(kSpace,[5 ,2 ,1 ,6 ,7 ,8 ,9 ,10,11,12,4 ,13,14,3 ]);
 
                 % wavelet in y and x spatial dimensions 2^1+2^2=6
@@ -2113,31 +2135,6 @@ classdef proudData
                     kSpacePicsSum = sum(kSpacePics,[11,12]);
                     sensitivities = bart(app,'ecalib -S -I -a', kSpacePicsSum);      % ecalib with softsense
 
-                    % Pics reconstuction
-                    picsCommand = 'pics -S';
-                    if LW>0
-                        picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
-                    end
-                    if TVxy>0
-                        picsCommand = [picsCommand,' -RT:6:0:',num2str(TVxy)];
-                    end
-                    if LR>0
-                        % Locally low-rank in the spatial domain
-                        blocksize = round(max([dimx dimy])/16);  % Block size
-                        app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
-                        picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
-                    end
-                    if TVd>0
-                        picsCommand = [picsCommand,' -RT:1024:0:',num2str(TVd)];
-                    end
-                    imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                    % Sum of squares reconstruction
-                    imageReg = abs(bart(app,'rss 16', imageTmp));
-
-                    % Phase image
-                    phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
-                  
                 end
 
                 if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
@@ -2148,42 +2145,45 @@ classdef proudData
                         sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
                     end
 
-                    % Pics reconstruction
-                    picsCommand = 'pics -S';
-                    if LW>0
-                        picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
-                    end
-                    if TVxy>0
-                        picsCommand = [picsCommand,' -RT:6:0:',num2str(TVxy)];
-                    end
-                    if LR>0
-                        % Locally low-rank in the spatial domain
-                        blocksize = round(max([dimx dimy])/16);  % Block size
-                        app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
-                        picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
-                    end
-                    if TVd>0
-                        picsCommand = [picsCommand,' -RT:1024:0:',num2str(TVd)];
-                    end
-                    imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                    % Modulus image
-                    imageReg = abs(imageTmp);
-
-                    % Phase image
-                    phaseImageReg = angle(imageTmp);
-
                 end
+
+                % Pics reconstuction
+                picsCommand = 'pics -S';
+                if LW>0
+                    picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
+                end
+                if TVxy>0
+                    picsCommand = [picsCommand,' -R',obj.totalVariation,':6:0:',num2str(TVxy)];
+                end
+                if LR>0
+                    % Locally low-rank in the spatial domain
+                    blocksize = round(max([dimx dimy])/16);  % Block size
+                    app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
+                    picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
+                end
+                if TVd>0
+                    picsCommand = [picsCommand,' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
+                end
+                imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+
+                % Sum of squares reconstruction
+                imageReg = abs(bart(app,'rss 16', imageTmp));
+
+                % Modulus image
+                imageReg = abs(imageTmp);
+
+                % Phase image
+                phaseImageReg = angle(imageTmp);
 
                 % Rearrange to correct orientation: x, y, slices, dynamics,
                 imageReg = reshape(imageReg,[dimy,dimx,dimd,dimz]);
                 phaseImageReg = reshape(phaseImageReg,[dimy,dimx,dimd,dimz]);
 
-                imagesOut = permute(imageReg,[1,2,4,3]);
-                imagesOut = flip(imagesOut,1);
+                imagesOut = permute(imageReg,[2,1,4,3]);
+                imagesOut = flip(imagesOut,2);
 
-                phaseImagesOut = permute(phaseImageReg,[1,2,4,3]);
-                phaseImagesOut = flip(phaseImagesOut,1);
+                phaseImagesOut = permute(phaseImageReg,[2,1,4,3]);
+                phaseImagesOut = flip(phaseImagesOut,2);
 
                 % Return the images object
                 obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2325,14 +2325,14 @@ classdef proudData
                 end
 
                 % Orientations are flipped
-                imagesOut = flip(permute(imagesOut,[2 1 3 4]),2);
-                phaseImagesOut = flip(permute(phaseImagesOut,[2 1 3 4]),2);
+                imagesOut = flip(permute(imagesOut,[1 2 3 4]),1);
+                phaseImagesOut = flip(permute(phaseImagesOut,[1 2 3 4]),1);
 
                 % There seems to be a 1 pixel shift with this reco, correct for this:
-                imagesOut = circshift(imagesOut,-1,1);
-                imagesOut = circshift(imagesOut,1,2);
-                phaseImagesOut = circshift(phaseImagesOut,-1,1);
-                phaseImagesOut = circshift(phaseImagesOut,1,2);
+                imagesOut = circshift(imagesOut,-1,2);
+                imagesOut = circshift(imagesOut,1,1);
+                phaseImagesOut = circshift(phaseImagesOut,-1,2);
+                phaseImagesOut = circshift(phaseImagesOut,1,1);
 
                 % Return the images object
                 obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2454,8 +2454,8 @@ classdef proudData
             end
 
             % Flip 2nd dimension
-            imagesOut = flip(permute(imagesOut,[2 1 3 4]),1);
-            phaseImagesOut = flip(permute(phaseImagesOut,[2 1 3 4]),1);
+            imagesOut = flip(permute(imagesOut,[1 2 3 4]),2);
+            phaseImagesOut = flip(permute(phaseImagesOut,[1 2 3 4]),2);
 
             % Return the images object
             obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2542,29 +2542,6 @@ classdef proudData
                     kSpacePicsSum = sum(kSpacePics,11);
                     sensitivities = bart(app,'ecalib -I -S -a', kSpacePicsSum);
 
-                    % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7, total variation in time 2^10 = 1024
-                    picsCommand = 'pics -S';
-                    if LambdaWavelet>0
-                        picsCommand = [picsCommand, ' -RW:7:0:',num2str(LambdaWavelet)];
-                    end
-                    if TVxyz>0
-                        picsCommand = [picsCommand, ' -RT:7:0:',num2str(TVxyz)];
-                    end
-                    if LR>0
-                        % Locally low-rank in the spatial domain
-                        blockSize = round(max([dimx dimy dimz])/16);  % Block size
-                        app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blockSize)));
-                        picsCommand = [picsCommand, ' -RL:7:7:',num2str(LR)];
-                    end
-                    if TVd>0
-                        picsCommand = [picsCommand, ' -RT:1024:0:',num2str(TVd)];
-                    end
-                    imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                    % Sum of squares
-                    imagesReg = abs(bart(app,'rss 16', imagesTmp));
-                    phaseImagesReg = angle(imagesTmp(:,:,:,:,1,:));
-
                 end
 
                 if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
@@ -2575,31 +2552,33 @@ classdef proudData
                         sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
                     end
 
-                    % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7, total variation in time 2^10 = 1024
-                    % Regular reconstruction
-                    picsCommand = 'pics -S';
-                    if LambdaWavelet>0
-                        picsCommand = [picsCommand, ' -RW:7:0:',num2str(LambdaWavelet)];
-                    end
-                    if TVxyz>0
-                        picsCommand = [picsCommand, ' -RT:7:0:',num2str(TVxyz)];
-                    end
-                    if LR>0
-                        % Locally low-rank in the spatial domain
-                        blockSize = round(max([dimx dimy dimz])/16);  % Block size
-                        app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blockSize)));
-                        picsCommand = [picsCommand, ' -RL:7:7:',num2str(LR)];
-                    end
-                    if TVd>0
-                        picsCommand = [picsCommand, ' -RT:1024:0:',num2str(TVd)];
-                    end
-                    imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
-
-                    % Absolute value
-                    imagesReg = abs(imagesTmp);
-                    phaseImagesReg = angle(imagesTmp);
-
                 end
+
+                % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7, total variation in time 2^10 = 1024
+                picsCommand = 'pics -S';
+                if LambdaWavelet>0
+                    picsCommand = [picsCommand, ' -RW:7:0:',num2str(LambdaWavelet)];
+                end
+                if TVxyz>0
+                    picsCommand = [picsCommand, ' -R',obj.totalVariation,':7:0:',num2str(TVxyz)];
+                end
+                if LR>0
+                    % Locally low-rank in the spatial domain
+                    blockSize = round(max([dimx dimy dimz])/16);  % Block size
+                    app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blockSize)));
+                    picsCommand = [picsCommand, ' -RL:7:7:',num2str(LR)];
+                end
+                if TVd>0
+                    picsCommand = [picsCommand, ' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
+                end
+                imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+
+                % Sum of squares
+                imagesReg = abs(bart(app,'rss 16', imagesTmp));
+
+                % Modulus and phase image
+                imagesReg = abs(imagesTmp);
+                phaseImagesReg = angle(imagesTmp);
 
                 % Rearrange to correct orientation: x, y, z, dynamics, slab
                 imagesReg = reshape(imagesReg,[dimz,dimy,dimx,dimd,dims]);
@@ -2993,7 +2972,8 @@ classdef proudData
             for i=1:obj.nrCoils
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
-
+            averages = obj.nsaSpace;                     % Averages
+         
             % Center echo and/or phase correction
             interpFactor = 16;
             dimx = size(kSpaceRaw{1},1);
@@ -3038,6 +3018,7 @@ classdef proudData
             for i=1:obj.nrCoils
                 kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
             end
+            averages = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],averages);
 
             % kx, ky, slices, dynamics, coils
             for i = 1:obj.nrCoils
@@ -3088,6 +3069,9 @@ classdef proudData
             %                            1 readout spokes
             % Rearrange for BART         1  2  3  4  5  6  7  8  9 10 11 12 13 14
             kSpacePics = permute(kSpace,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
+
+            % Rearrange for BART        1  2  3  4  5  6  7  8  9 10 11 12 13 14
+            avgPics = permute(averages,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
 
             % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
             trajPics = permute(traj,[1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14]);
@@ -3321,12 +3305,14 @@ classdef proudData
             % Density correction
             if app.DensityCorrectCheckBox.Value
                 app.TextMessage('Calculating density correction ...');
-                onesDense = ones(size(kSpacePics));
-                tmpDense = bart(app,strcat('nufft -d',num2str(dimx),':',num2str(dimy),':1 -a'),trajPics,onesDense);
-                density = bart(app,'nufft ',trajPics,tmpDense);
-                density = density.^(-1/2);
-                density(isnan(density)) = 0;
-                density(isinf(density)) = 0;
+                denseOnes = ones(size(kSpacePics));
+                denseOnes = denseOnes.*avgPics; % Make sure denseOnes contains only 1's when data is available
+                denseOnes(denseOnes > 1) = 1;
+                tmpDense = bart(app,strcat('nufft -d',num2str(dimx),':',num2str(dimy),':1 -a'),trajPics,denseOnes);
+                densityPics = bart(app,'nufft ',trajPics,tmpDense);
+                densityPics = densityPics.^(-1/2);
+                densityPics(isnan(densityPics)) = 0;
+                densityPics(isinf(densityPics)) = 0;
             end
 
             % Prepare the 2D radial PICS reconstruction
@@ -3350,7 +3336,7 @@ classdef proudData
 
             % The actual reconstruction
             if app.DensityCorrectCheckBox.Value
-                igrid = bart(app,picsCommand,'-p',density,'-t',trajPics,kSpacePics,sensitivities);
+                igrid = bart(app,picsCommand,'-p',densityPics,'-t',trajPics,kSpacePics,sensitivities);
             else
                 igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
             end

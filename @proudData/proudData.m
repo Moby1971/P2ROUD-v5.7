@@ -1250,7 +1250,6 @@ classdef proudData
 
                     case 4
                         if obj.NO_SLICES > 1
-                            disp(size(obj.rawKspace{1}))
                             obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,2,1]);
                         else
                             obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,5,1,2]);
@@ -2966,18 +2965,21 @@ classdef proudData
             TVxyz = app.TVxyzEditField.Value;
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
+            dimc = obj.nrCoils;
 
-            % Original kx, ky, slices, dynamics
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
+            % Original kx, ky, slices, dynamics  (X, Y, Z, NR, NFA, NE) 
+            kSpaceRaw = cell(dimc);
+            for i=1:dimc
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
-            averages = obj.nsaSpace;                     % Averages
-         
+
+            % Averages
+            averages = obj.nsaSpace;
+
             % Center echo and/or phase correction
             interpFactor = 16;
             dimx = size(kSpaceRaw{1},1);
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimc
                 for dimy = 1:size(kSpaceRaw{coil},2)
                     for slice = 1:size(kSpaceRaw{coil},3)
                         for dynamic = 1:size(kSpaceRaw{coil},4)
@@ -3003,7 +3005,7 @@ classdef proudData
             % Apply Tukey filter (again, after shift)
             filterWidth = 0.25;
             tmpFilter = tukeywin(dimx,filterWidth);
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimc
                 tukeyFilter(:,1,1,1) = tmpFilter;
                 kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
             end
@@ -3015,13 +3017,13 @@ classdef proudData
             dimd = app.NREditField.Value;
 
             % Resize k-space to requested size (kx, ky, slice, nr) by interpolation
-            for i=1:obj.nrCoils
+            for i=1:dimc
                 kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
             end
             averages = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],averages);
 
             % kx, ky, slices, dynamics, coils
-            for i = 1:obj.nrCoils
+            for i = 1:dimc
                 kSpace(:,:,:,:,i) = kSpaceRaw{i};
             end
 
@@ -3038,13 +3040,7 @@ classdef proudData
 
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
-            fullAngle = 180;
-            for j = 1:dimy
-                % crds, x, y(spoke)
-                traj(1,:,j) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(j-1)*fullAngle/dimy);
-                traj(2,:,j) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(j-1)*fullAngle/dimy);
-                traj(3,:,j) = 0;
-            end
+            traj = proudData.twoDradialTrajectory(dimx, dimy, dimz, dimd, dimc);
 
             % Bart dimensions  Bart   Matlab
             % 	READ_DIM,       0       1   x
@@ -3074,7 +3070,7 @@ classdef proudData
             avgPics = permute(averages,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
 
             % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            trajPics = permute(traj,[1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14]);
+            trajPics = permute(traj,[1, 2, 3, 6, 7, 8, 9,10,11,12,13, 5,14, 4]);
 
             % Gradient delay vector from app
             dTotal(1) = app.GxDelayEditField.Value;
@@ -3210,7 +3206,7 @@ classdef proudData
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
                             dataCalib = bart(app,'bart nufft',kTraj,kNew);
-                            kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) obj.nrCoils]);
+                            kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) dimc]);
 
                             % Partial derivatives
                             [dydtx,dydty] = obj.partialDerivative2D(app,kTraj,xNew,calibSize);
@@ -3241,11 +3237,10 @@ classdef proudData
                             kTraj = obj.trajInterpolation(kTrajCalib,dTotal);
 
                             % The new image with k-space updated for gradient delays
-                            imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M2-M1+1 size(kTrajCalib,3) obj.nrCoils]));
+                            imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M2-M1+1 size(kTrajCalib,3) dimc]));
 
                             % Show image
                             im = squeeze(abs(imCalib(:,:)));
-                            im = permute(im,[2 1]);
                             if obj.PHASE_ORIENTATION
                                 im = rot90(im,-1);
                                 daspect(app.RecoFig,[1 1 1]);
@@ -3282,12 +3277,12 @@ classdef proudData
             end % Gradient calibration
 
             % Final gradient delay correction from optimization or values from app
-            trajPics = permute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+            trajPics = permute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
             trajPics = obj.trajInterpolation(trajPics,dTotal);
-            trajPics = ipermute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+            trajPics = ipermute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
 
             % Sensitivity maps
-            if obj.nrCoils > 1 
+            if dimc > 1 
                 kSpacePicsSum = sum(kSpacePics,[11,12]);
                 trajPicsSum = sum(trajPics,[11,12]);
                 ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
@@ -3299,17 +3294,17 @@ classdef proudData
                 kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dimy),' 1 ',num2str(dimx)], lowResKspace);
                 sensitivities = bart(app,'ecalib -t0.002 -m1', kSpaceZeroFilled);
             else
-                sensitivities = ones(dimx,dimy,1,obj.nrCoils,1,1,1,1,1,1,1,1,1,dimz);
+                sensitivities = ones(dimx,dimy,1,dimc,1,1,1,1,1,1,1,1,1,dimz);
             end
 
             % Density correction
             if app.DensityCorrectCheckBox.Value
                 app.TextMessage('Calculating density correction ...');
-                denseOnes = ones(size(kSpacePics));
-                denseOnes = denseOnes.*avgPics; % Make sure denseOnes contains only 1's when data is available
-                denseOnes(denseOnes > 1) = 1;
-                tmpDense = bart(app,strcat('nufft -d',num2str(dimx),':',num2str(dimy),':1 -a'),trajPics,denseOnes);
-                densityPics = bart(app,'nufft ',trajPics,tmpDense);
+                densityOnes = ones(size(kSpacePics));
+                densityOnes = densityOnes.*avgPics; % Make sure densityOnes contains only 1's when data is available
+                densityOnes(densityOnes > 1) = 1;
+                densityTmp = bart(app,strcat('nufft -d',num2str(dimx),':',num2str(dimy),':1 -a'),trajPics,densityOnes);
+                densityPics = bart(app,'nufft ',trajPics,densityTmp);
                 densityPics = densityPics.^(-1/2);
                 densityPics(isnan(densityPics)) = 0;
                 densityPics(isinf(densityPics)) = 0;
@@ -3341,16 +3336,19 @@ classdef proudData
                 igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
             end
 
+            % Root sum of squares over all coils
+            recoImage = bart(app,'rss 16', igrid);
+
             % Interpolate to desired dimy if necessary
             if dimy ~= size(igrid,3)
                 dimy = app.YEditField.Value;
-                figrid = bart(app,'fft 2',igrid);
-                figrid = bart(app,['resize -c 1 ',num2str(dimy)],figrid);
-                igrid = bart(app,'fft -i 2',figrid);
+                fiGrid = bart(app,'fft 2',recoImage);
+                fiGrid = bart(app,['resize -c 1 ',num2str(dimy)],fiGrid);
+                igrid = bart(app,'fft -i 2',fiGrid);
             end
      
             % Rearrange to orientation: x, y, slices, dynamics
-            imageOut = permute(igrid,[2, 1, 14, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
+            imageOut = permute(igrid,[1, 2, 14, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
 
             % Absolute value and phase image
             imagesReg = abs(imageOut);
@@ -3484,7 +3482,7 @@ classdef proudData
             imageOut = rssq(image,5);
 
             % Adjust dimensions
-            imageOut = permute(imageOut,[2 1 3 4]);
+            imageOut = permute(imageOut,[1 2 3 4]); % Seems to be the right orientation
 
             % Absolute value and phase image
             imagesReg = abs(imageOut);
@@ -3511,12 +3509,16 @@ classdef proudData
             TVxyz = app.TVxyzEditField.Value;
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
+            dimc = obj.nrCoils;
 
-            % Original kx(readout), ky(spokes)
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,1,flipAngle,echoTime);
+            % Original kx(readout), ky(spokes), 1, dynamics, flip-angle, echo-time
+            kSpaceRaw = cell(dimc);
+            for i=1:dimc
+                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
+
+            % Averages
+            averages = obj.nsaSpace;
 
             % Gradient delays from app
             dTotal(1) = app.GxDelayEditField.Value;
@@ -3524,16 +3526,22 @@ classdef proudData
             dTotal(3) = app.GzDelayEditField.Value;
             offset = app.DataOffsetRadialEditField.Value;
 
-            % Data dimensions
-            [dimx, dimy] = size(kSpaceRaw{1});
+            % Data size
+            dimx = size(obj.rawKspace{1},1);
+            dimy = size(obj.rawKspace{1},2);
+            dimd = app.NREditField.Value;
 
             % K-space radial spokes
             dims = length(obj.gradTrajectory);
-            traj = zeros(3,dims,dimy);
-            for cnt = 1:dimy
-                traj(1,:,cnt) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
-                traj(2,:,cnt) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
-                traj(3,:,cnt) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+            traj = zeros(3,dims,dimy,dimd);
+            for i=1:dimc
+                for d = 1:dimd
+                    for cnt = 1:dimy
+                        traj(1,:,cnt,d,i) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                        traj(2,:,cnt,d,i) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                        traj(3,:,cnt,d,i) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+                    end
+                end
             end
 
             % Check if offset is not too large, if so reduce size
@@ -3542,23 +3550,33 @@ classdef proudData
             app.DataOffsetRadialEditField.Value = offset;
 
             % Resize k-space and remove offset
-            for i = 1:obj.nrCoils
-                kSpace{i}(:,:) = kSpaceRaw{i}(1+offset:dims+offset,:);
+            for i = 1:dimc
+                kSpace{i}(:,:,:,:) = kSpaceRaw{i}(1+offset:dims+offset,:,:,:);
             end
+            averages = averages(1+offset:dims+offset,:,:,:);
 
+            % Resize k-space to requested dynamic size by interpolation
+            for i=1:dimc
+                kSpace{i} = bart(app,['resize -c 3 ',num2str(dimd)],kSpace{i});
+            end
+            averages = bart(app,['resize -c 3 ',num2str(dimd)],averages);
+            traj = bart(app,['resize -c 3 ',num2str(dimd)],traj);
+ 
             % Auto shift to maximum intensity at first data point
             if app.CenterEchoCheckBox.Value
                 interpFactor = 16;
-                for coil = 1:obj.nrCoils
-                    for spoke = 1:dimy
-                        tmpKline1 = kSpace{coil}(:,spoke);
-                        tmpKline2 = interp(tmpKline1,interpFactor);
-                        [~,kCenter] = max(abs(tmpKline2));
-                        kShift = 1-kCenter/interpFactor;
-                        discard = ceil(abs(kShift));
-                        tmpKline1 = fraccircshift(tmpKline1,kShift);
-                        tmpKline1(end-discard:end) = 0;
-                        kSpace{coil}(:,spoke) = tmpKline1;
+                for coil = 1:dimc
+                    for dynamic = 1:dimd
+                        for spoke = 1:dimy
+                            tmpKline1 = kSpace{coil}(:,spoke,1,dynamic);
+                            tmpKline2 = interp(tmpKline1,interpFactor);
+                            [~,kCenter] = max(abs(tmpKline2));
+                            kShift = 1-kCenter/interpFactor;
+                            discard = ceil(abs(kShift));
+                            tmpKline1 = fraccircshift(tmpKline1,kShift);
+                            tmpKline1(end-discard:end) = 0;
+                            kSpace{coil}(:,spoke,1,dynamic) = tmpKline1;
+                        end
                     end
                 end
             end
@@ -3566,18 +3584,20 @@ classdef proudData
             % Phase correction
             if app.PhaseCorrectCheckBox.Value
                 interpFactor = 16;
-                for coil = 1:obj.nrCoils
-                    for spoke = 1:dimy
-                        tmpKline1 = kSpace{coil}(:,spoke);
-                        kCenterPhase = angle(tmpKline1(1));
-                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
-                        kSpace{coil}(:,spoke) = tmpKline1;
+                for coil = 1:dimc
+                    for dynamic = 1:dimd
+                        for spoke = 1:dimy
+                            tmpKline1 = kSpace{coil}(:,spoke,1,dynamic);
+                            kCenterPhase = angle(tmpKline1(1));
+                            tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                            kSpace{coil}(:,spoke,1,dynamic) = tmpKline1;
+                        end
                     end
                 end
             end
 
             % kx(readout), ky(spokes), 1, dynamics, coils
-            for i = 1:obj.nrCoils
+            for i = 1:dimc
                 kSpacePics(:,:,1,:,i) = kSpace{i};
             end
 
@@ -3599,14 +3619,17 @@ classdef proudData
             % 	AVG_DIM,        14      15
 
             %           1      2        3        4       5
-            % Initially x, y(spokes), slices, dynamics, coils
+            % Initially x, y(spokes),   1,    dynamics, coils
 
-            %                                1 readout spokes
+            %                                1 readout spokes coils .....    dynamics
             % Rearrange for BART             1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            kSpacePics = permute(kSpacePics,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
+            kSpacePics = permute(kSpacePics,[6, 1, 2, 5, 3, 7, 8, 9,10,11,12, 4,13,14]);
+
+            % Rearrange for BART        1  2  3  4  5  6  7  8  9 10 11 12 13 14
+            avgPics = permute(averages,[6, 1, 2, 5, 3, 7, 8, 9,10,11,12, 4,13,14]);
 
             % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            trajPics = permute(traj,[1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14]);
+            trajPics = permute(traj,[1, 2, 3, 5, 6, 7, 8, 9,10,11,12, 4,13,14]);
 
             % Calibration and density correction size
             kdim = round(dims/3);
@@ -3689,7 +3712,7 @@ classdef proudData
                     % NUFFT to get updated k-space data
                     kNew = proudData.ifft3Dmri(xNew);
                     dataCalib = bart(app,'bart nufft',kTraj,kNew);
-                    kNew  = reshape(dataCalib,[M size(kTrajCalib,3) obj.nrCoils]);
+                    kNew  = reshape(dataCalib,[M size(kTrajCalib,3) dimc]);
 
                     % Partial derivatives
                     [dydtx,dydty,dydtz] = proudData.partialDerivative3D(app,kTraj,xNew,calibSize);
@@ -3719,7 +3742,7 @@ classdef proudData
                     kTraj = proudData.trajInterpolation(kTrajCalib,dTotal);
 
                     % The new image with k-space updated for gradient delays
-                    imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M size(kTrajCalib,3) obj.nrCoils]));
+                    imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M size(kTrajCalib,3) dimc]));
 
                     % Show image
                     im = squeeze(abs(imCalib(:,:,round(calibSize(3)/2),1)));
@@ -3744,12 +3767,12 @@ classdef proudData
             end % Gradient calibration
 
             % Final gradient delay correction from optimization or values from app
-            trajPics = permute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+            trajPics = permute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
             trajPics = obj.trajInterpolation(trajPics,dTotal);
-            trajPics = ipermute(trajPics,[1 2 3 4 11 12 5 6 7 8 9 10]);
+            trajPics = ipermute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
 
             % Coil sensitivities from sum of all frames and dynamics
-            if obj.nrCoils > 1
+            if dimc > 1
                 kSpacePicsSum = sum(kSpacePics,[11,12]);
                 trajPicsSum = sum(trajPics,[11,12]);
                 ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
@@ -3761,18 +3784,20 @@ classdef proudData
                 kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dims),' 1 ',num2str(dims),' 2 ',num2str(dims)], lowResKspace);
                 sensitivities = bart(app,'ecalib -S -t0.0005 -m1', kSpaceZeroFilled);
             else
-                sensitivities = ones(dims,dims,dims,1,1,1,1,1,1,1,1,1,1,1);
+                sensitivities = ones(dims,dims,dims,dimc,1,1,1,1,1,1,1,1,1,1);
             end
 
             % Density correction
             if app.DensityCorrectCheckBox.Value
                 app.TextMessage('Calculating density correction ...');
-                denseOnes = ones(size(kSpacePics));
-                denseTmp = bart(app,strcat('nufft -d',num2str(dims),':',num2str(dims),':',num2str(dims),' -a'),trajPics,denseOnes);
-                density = bart(app,'nufft ',trajPics,denseTmp);
-                density = density.^(-1/4);
-                density(isnan(density)) = 0;
-                density(isinf(density)) = 0;
+                densityOnes = ones(size(kSpacePics));
+                densityOnes = densityOnes.*avgPics; % Make sure densityOnes contains only 1's when data is available
+                densityOnes(densityOnes > 1) = 1;
+                densityTmp = bart(app,strcat('nufft -d',num2str(dims),':',num2str(dims),':',num2str(dims),' -a'),trajPics,densityOnes);
+                densityPics = bart(app,'nufft ',trajPics,densityTmp);
+                densityPics = densityPics.^(-1/4);
+                densityPics(isnan(densityPics)) = 0;
+                densityPics(isinf(densityPics)) = 0;
             end
 
             % Prepare the PICS reconstruction
@@ -3796,23 +3821,23 @@ classdef proudData
 
             % Do the Bart reco
             if app.DensityCorrectCheckBox.Value
-                igrid = bart(app,picsCommand,'-t',trajPics,'-p',density,kSpacePics,sensitivities);
+                igrid = bart(app,picsCommand,'-t',trajPics,'-p',densityPics,kSpacePics,sensitivities);
             else
                 igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
             end
 
             % Root sum of squares over all coils
-            recoImage = bart(app,'rss 8', igrid);
+            recoImage = bart(app,'rss 16', igrid);
 
-            % Interpolate to desired dimy if requested
+            % Interpolate to desired dimensions if requested
             ndimx = app.XEditField.Value;
             ndimy = app.YEditField.Value;
             ndimz = app.ZEditField.Value;
-            [dimx, dimy, dimz] = size(obj.images);
+            [dimx, dimy, dimz, ~ ] = size(obj.images);
             if (ndimx ~= dimx) || (ndimy ~= dimy) || (ndimz ~= dimz)
-                figrid = bart(app,'fft 7',recoImage);
-                figrid = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 2 ',num2str(ndimz)],figrid);
-                recoImage = bart(app,'fft -i 7',figrid);
+                fiGrid = bart(app,'fft 7',recoImage);
+                fiGrid = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 2 ',num2str(ndimz)],fiGrid);
+                recoImage = bart(app,'fft -i 7',fiGrid);
             end
 
             % Absolute value and phase image
@@ -3820,12 +3845,9 @@ classdef proudData
             phaseImagesReg = angle(recoImage);
 
             % Return the image objects
-            obj.images(:,:,:,1,flipAngle,echoTime) = imagesReg;
-            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
-            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
-
-            % At this moment sorting in mulitple dynamics not supported
-            app.NREditField.Value = 1;
+            obj.images(:,:,:,:,flipAngle,echoTime) = imagesReg;
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
 
         end % Reco3DuteCS
 
@@ -5022,9 +5044,9 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function X = fft3Dmri(x)
 
-            X=fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
-            X=fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
-            X=fftshift(ifft(fftshift(X,3),[],3),3)*sqrt(size(x,3));
+            X = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
+            X = fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
+            X = fftshift(ifft(fftshift(X,3),[],3),3)*sqrt(size(x,3));
 
         end % FFT 3D
 
@@ -5033,11 +5055,11 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % iFFT 3D
         % ---------------------------------------------------------------------------------
-        function x=ifft3Dmri(X)
+        function x = ifft3Dmri(X)
 
-            x=fftshift(fft(fftshift(X,1),[],1),1)/sqrt(size(X,1));
-            x=fftshift(fft(fftshift(x,2),[],2),2)/sqrt(size(X,2));
-            x=fftshift(fft(fftshift(x,3),[],3),3)/sqrt(size(X,3));
+            x = fftshift(fft(fftshift(X,1),[],1),1)/sqrt(size(X,1));
+            x = fftshift(fft(fftshift(x,2),[],2),2)/sqrt(size(X,2));
+            x = fftshift(fft(fftshift(x,3),[],3),3)/sqrt(size(X,3));
 
         end
 
@@ -5048,8 +5070,8 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function X = fft2Dmri(x)
 
-            X=fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
-            X=fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
+            X = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
+            X = fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
         
         end % FFT 2D
 
@@ -5058,17 +5080,44 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % iFFT 2D
         % ---------------------------------------------------------------------------------
-        function x=ifft2Dmri(X)
+        function x = ifft2Dmri(X)
 
-            x=fftshift(fft(fftshift(X,1),[],1),1)/sqrt(size(X,1));
-            x=fftshift(fft(fftshift(x,2),[],2),2)/sqrt(size(X,2));
+            x = fftshift(fft(fftshift(X,1),[],1),1)/sqrt(size(X,1));
+            x = fftshift(fft(fftshift(x,2),[],2),2)/sqrt(size(X,2));
    
         end
 
 
 
+        % ---------------------------------------------------------------------------------
+        % 2D radial 0 - 180 trajectory
+        % ---------------------------------------------------------------------------------
+        function traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
+
+            % Make the radial trajectory 0-180 degrees
+            % Could be extended with different trajectories if available
+
+            fullAngle = 180;
+            for c = 1:dims
+                for d = 1:dimd
+                    for z = 1:dimz
+                        for j = 1:dimy
+                            % crds, x, y(spoke), slice, repetitions, coils
+                            traj(1,:,j,z,d,c) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(j-1)*fullAngle/dimy);
+                            traj(2,:,j,z,d,c) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(j-1)*fullAngle/dimy);
+                            traj(3,:,j,z,d,c) = 0;
+                        end
+                    end
+                end
+            end
+
+        end % twoDradialTrajectory
+
+
+
 
     end % Static methods
+
 
 
 

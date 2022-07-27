@@ -191,9 +191,10 @@ classdef proudData
     % res = im2row2D(im, winSize)
     % v = vec(x)
     % X = fft3Dmri(x)
-    % X = ifft3Dmri(x)
+    % x = ifft3Dmri(X)
     % X = fft2Dmri(x)
-    % X = ifft2Dmri(x)
+    % x = ifft2Dmri(X)
+    % traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
     %
 
 
@@ -4879,39 +4880,44 @@ classdef proudData
 
             kSpaceNew = zeros(size(kSpaceOld));
 
-            for idx6 = 1:size(kSpaceOld,6) % dynamics
+            % Loop over many dimensions
+            for idx7 = 1:size(kSpaceOld,7) 
 
-                for idx5 = 1:size(kSpaceOld,5) % frames
+                for idx6 = 1:size(kSpaceOld,6) 
 
-                    for idx4 = 1:size(kSpaceOld,4) % slices
+                    for idx5 = 1:size(kSpaceOld,5)
 
-                        for idx3 = 1:size(kSpaceOld,3) % spokes
+                        for idx4 = 1:size(kSpaceOld,4) 
 
-                            kx = interp1((1:size(kSpaceOld,2))+dShift(1),kSpaceOld(1,:,idx3,idx4,idx5,idx6),1:size(kSpaceOld,2),'linear'); %Kx
-                            ky = interp1((1:size(kSpaceOld,2))+dShift(2),kSpaceOld(2,:,idx3,idx4,idx5,idx6),1:size(kSpaceOld,2),'linear'); %Ky
-                            kz = interp1((1:size(kSpaceOld,2))+dShift(3),kSpaceOld(3,:,idx3,idx4,idx5,idx6),1:size(kSpaceOld,2),'linear'); %Kz
+                            for idx3 = 1:size(kSpaceOld,3) 
 
-                            if dShift(1) > 0
-                                kx(isnan(kx)) = 0;
-                            else
-                                kx(isnan(kx)) = kSpaceOld(1,isnan(kx),idx3,idx4,idx5,idx6);
+                                kx = interp1((1:size(kSpaceOld,2))+dShift(1),kSpaceOld(1,:,idx3,idx4,idx5,idx6,idx7),1:size(kSpaceOld,2),'linear'); % Kx
+                                ky = interp1((1:size(kSpaceOld,2))+dShift(2),kSpaceOld(2,:,idx3,idx4,idx5,idx6,idx7),1:size(kSpaceOld,2),'linear'); % Ky
+                                kz = interp1((1:size(kSpaceOld,2))+dShift(3),kSpaceOld(3,:,idx3,idx4,idx5,idx6,idx7),1:size(kSpaceOld,2),'linear'); % Kz
+
+                                if dShift(1) > 0
+                                    kx(isnan(kx)) = 0;
+                                else
+                                    kx(isnan(kx)) = kSpaceOld(1,isnan(kx),idx3,idx4,idx5,idx6,idx7);
+                                end
+
+                                if dShift(2) > 0
+                                    ky(isnan(ky)) = 0;
+                                else
+                                    ky(isnan(ky)) = kSpaceOld(2,isnan(ky),idx3,idx4,idx5,idx6,idx7);
+                                end
+
+                                if dShift(3) > 0
+                                    kz(isnan(kz)) = 0;
+                                else
+                                    kz(isnan(kz)) = kSpaceOld(3,isnan(kz),idx3,idx4,idx5,idx6,idx7);
+                                end
+
+                                kSpaceNew(1,:,idx3,idx4,idx5,idx6,idx7) = kx(:);
+                                kSpaceNew(2,:,idx3,idx4,idx5,idx6,idx7) = ky(:);
+                                kSpaceNew(3,:,idx3,idx4,idx5,idx6,idx7) = kz(:);
+
                             end
-
-                            if dShift(2) > 0
-                                ky(isnan(ky)) = 0;
-                            else
-                                ky(isnan(ky)) = kSpaceOld(2,isnan(ky),idx3,idx4,idx5,idx6);
-                            end
-
-                            if dShift(3) > 0
-                                kz(isnan(kz)) = 0;
-                            else
-                                kz(isnan(kz)) = kSpaceOld(3,isnan(kz),idx3,idx4,idx5,idx6);
-                            end
-
-                            kSpaceNew(1,:,idx3,idx4,idx5,idx6) = kx(:);
-                            kSpaceNew(2,:,idx3,idx4,idx5,idx6) = ky(:);
-                            kSpaceNew(3,:,idx3,idx4,idx5,idx6) = kz(:);
 
                         end
 

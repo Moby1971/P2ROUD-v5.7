@@ -832,7 +832,7 @@ classdef proudData
                         inputfooter = insertAfter(inputfooter,pos+length(txt)+commapos,'      ');
                         pos = pos+commapos;
                     end
-                 
+
                     % Replace the values with the new ones
                     newtext = [num2str(var),'     '];
                     newtext = newtext(1:6);
@@ -912,7 +912,9 @@ classdef proudData
                 ':EDITTEXT SAMPLES_DIM3 ',':EDITTEXT DATA_LENGTH3 ', ':EDITTEXT OUTPUT_SIZE3 ', ...
                 ':EDITTEXT LAST_SLICE ',':EDITTEXT MAX_SLICE ', ...
                 ':COMBOBOX FFT_DIM1 ',':COMBOBOX FFT_DIM2 ',':COMBOBOX FFT_DIM3 ', ...
-                ':RADIOBUTTON VIEW_ORDER_1',':RADIOBUTTON VIEW_ORDER_2'
+                ':RADIOBUTTON VIEW_ORDER_1',':RADIOBUTTON VIEW_ORDER_2', ...
+                ':EDITTEXT VIEWS_PER_SEGMENT ', ...
+                ':COMBOBOX RECON_METHOD ' ...
                 };
 
             % New parameter values
@@ -923,7 +925,9 @@ classdef proudData
                 par.NoViews2, par.NoViews2, par.NoViews2, ...
                 par.NoSlices, par.NoSlices, ...
                 par.NoSamples, par.NoViews, par.NoViews2, ...
-                par.View1order, par.View2order
+                par.View1order, par.View2order, ...
+                par.viewspersegment, ...
+                par.reconmethod ...
                 };
 
             % Loop over all parameters
@@ -936,8 +940,7 @@ classdef proudData
                 pos = strfind(inputrpr,txt);
 
                 if ~isempty(pos)
-
-                    
+              
                     if ~isstring(var)
                         % Numeric values
                         oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
@@ -2080,7 +2083,7 @@ classdef proudData
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
 
-            if app.bartDetected_flag
+            if ~app.bartDetected_flag
                 % CS reco with BART
 
                 % kSpaceRaw = {coil}[X Y slices NR]
@@ -2180,10 +2183,16 @@ classdef proudData
                 phaseImageReg = reshape(phaseImageReg,[dimy,dimx,dimd,dimz]);
 
                 imagesOut = permute(imageReg,[2,1,4,3]);
-                imagesOut = flip(imagesOut,2);
-
                 phaseImagesOut = permute(phaseImageReg,[2,1,4,3]);
-                phaseImagesOut = flip(phaseImagesOut,2);
+
+                % Flip 2nd dimension
+                if obj.PHASE_ORIENTATION == 1
+                    imagesOut = flip(imagesOut,2);
+                    phaseImagesOut = flip(phaseImagesOut,2);
+                else
+                    imagesOut = flip(flip(imagesOut,2),1);
+                    phaseImagesOut = flip(flip(phaseImagesOut,2),1);
+                end
 
                 % Return the images object
                 obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2324,9 +2333,11 @@ classdef proudData
 
                 end
 
-                % Orientations are flipped
-                imagesOut = flip(permute(imagesOut,[1 2 3 4]),1);
-                phaseImagesOut = flip(permute(phaseImagesOut,[1 2 3 4]),1);
+                % Flip dimensions if required
+                if obj.PHASE_ORIENTATION == 1
+                    imagesOut = flip(imagesOut,1);
+                    phaseImagesOut = flip(phaseImagesOut,1);
+                end
 
                 % There seems to be a 1 pixel shift with this reco, correct for this:
                 imagesOut = circshift(imagesOut,-1,2);
@@ -2453,9 +2464,14 @@ classdef proudData
 
             end
 
-            % Flip 2nd dimension
-            imagesOut = flip(permute(imagesOut,[1 2 3 4]),2);
-            phaseImagesOut = flip(permute(phaseImagesOut,[1 2 3 4]),2);
+            % Flip dimensions if required
+            if obj.PHASE_ORIENTATION == 1
+                imagesOut = flip(imagesOut,2);
+                phaseImagesOut = flip(phaseImagesOut,2);
+            else
+                imagesOut = flip(flip(imagesOut,2),1);
+                phaseImagesOut = flip(flip(phaseImagesOut,2),1);
+            end
 
             % Return the images object
             obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -2487,7 +2503,7 @@ classdef proudData
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime,:);
             end
 
-            if app.bartDetected_flag
+            if ~app.bartDetected_flag
                 % CS reco with BART
 
                 % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
@@ -2583,11 +2599,18 @@ classdef proudData
                 % Rearrange to correct orientation: x, y, z, dynamics, slab
                 imagesReg = reshape(imagesReg,[dimz,dimy,dimx,dimd,dims]);
                 imageSlab = permute(imagesReg,[3,2,1,4,5]);
-                imageSlab = flip(flip(imageSlab,1),2);
             
                 phaseImagesReg = reshape(phaseImagesReg,[dimz,dimy,dimx,dimd,dims]);
                 phaseImageSlab = permute(phaseImagesReg,[3,2,1,4,5]);
-                phaseImageSlab = flip(flip(phaseImageSlab,1),2);
+
+                % Flip dimensions to correct orientation
+                if obj.PHASE_ORIENTATION == 1
+                    imageSlab = flip(flip(imageSlab,3),2);
+                    phaseImageSlab = flip(flip(phaseImageSlab,3),2);
+                else
+                    imageSlab = flip(flip(flip(imageSlab,3),2),1);
+                    phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
+                end
 
                 if dims>1
                     % Slab ratio + discard
@@ -2754,11 +2777,14 @@ classdef proudData
                         phaseImageOut = angle(imageTmp(:,:,:,:));
                     end
 
-                    % Images are flipped in certain dimensions
-                    imageOut = flip(imageOut,3);
-                    phaseImageOut = flip(phaseImageOut,3);
-              
-                    % Images are shifted by 1 pixel in each dimension
+                    % Flip dimensions to correct orientation
+                    if obj.PHASE_ORIENTATION == 1
+                        imageOut = flip(imageOut,1);
+                        phaseImageOut = flip(phaseImageOut,1);
+                    end
+
+                    % Images are shifted by 1 pixel in each dimension,
+                    % could use tweaking
                     imageOut = circshift(imageOut,1,1);
                     imageOut = circshift(imageOut,-1,2);
                     imageOut = circshift(imageOut,1,3);
@@ -2920,9 +2946,14 @@ classdef proudData
 
             end
 
-            % Flip x and y dimensions
-            imageSlab = flip(flip(imageSlab,2),1);
-            phaseImageSlab = flip(flip(phaseImageSlab,2),1);
+            % Flip dimensions to correct orientation
+            if obj.PHASE_ORIENTATION == 1
+                imageSlab = flip(flip(imageSlab,3),2);
+                phaseImageSlab = flip(flip(phaseImageSlab,3),2);
+            else
+                imageSlab = flip(flip(flip(imageSlab,3),2),1);
+                phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
+            end
 
             % Slab ratio + discard
             if dims>1
@@ -4044,7 +4075,7 @@ classdef proudData
 
                     % Images = (X, Y, slices, NR, NFA, NE)
                     [~, ~, slices, NR, NFA, NE] = size(im);
-    
+
                     kSpace = zeros(size(im));
                     for i = 1:slices
                         for j = 1:NR
@@ -4058,15 +4089,18 @@ classdef proudData
 
                     % Samples, views, views2, slices, echoes (frames), experiments, flip-angles
                     kSpace = permute(kSpace,[1,2,7,3,6,4,5]);
-                    kSpace = flip(kSpace,4);
+                    if obj.PHASE_ORIENTATION == 1
+                        kSpace = flip(kSpace,1);
+                    end
                    
                     % Return the object
                     obj.mrdKspace = kSpace;
 
-                case "3D"
+                case {"3D","3Dute"}
 
                     % Images = (X, Y, Z, NR, NFA, NE)
                     [~, ~, ~, NR, NFA, NE] = size(im);
+
 
                     kSpace = zeros(size(im));
                     for j = 1:NR
@@ -4079,6 +4113,11 @@ classdef proudData
 
                     % Samples, views, views2, slices, echoes (frames), experiments, flip-angles
                     kSpace = permute(kSpace,[1,2,3,7,6,4,5]);
+                    if obj.PHASE_ORIENTATION == 1
+                        kSpace = flip(flip(kSpace,3),1);
+                    else
+                        kSpace = flip(kSpace,3);
+                    end
              
                     % Return the object
                     obj.mrdKspace = kSpace;

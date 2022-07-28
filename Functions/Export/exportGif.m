@@ -1,4 +1,4 @@
-function folderName = exportGif(app)
+function folderName = exportGif(app, tag)
 
 % ------------------------------------
 % ----- Export of images to gif ------
@@ -11,7 +11,7 @@ obj = app.proudDataPars;
 gifImages = obj.images;
 
 % Create folder if not exist, and delete folder content
-folderName = [app.gifExportPath,[filesep,'GIF']];
+folderName = [app.gifExportPath,[filesep,tag,'P-GIF']];
 if (~exist(folderName, 'dir')); mkdir(folderName); end
 delete([folderName,filesep,'*']);
 

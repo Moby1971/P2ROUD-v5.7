@@ -170,6 +170,7 @@ classdef proudData
     % obj = recoSurFiles(obj, surpath, suffix, mrdfilename, rprfilename)
     % obj = unwrap3D(obj)
     % obj = calcFlow(obj)
+    % obj = ExportRecoParametersFcn(obj, app, exportdir)
     % 
     %
     % -----------------------------------------------------------------
@@ -833,11 +834,14 @@ classdef proudData
                         pos = pos+commapos;
                     end
 
-                    % Replace the values with the new ones
-                    newtext = [num2str(var),'     '];
-                    newtext = newtext(1:6);
-                    inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
-  
+                    try
+                        % Replace the values with the new ones
+                        newtext = [num2str(var),'     '];
+                        newtext = newtext(1:6);
+                        inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+                    catch
+                    end
+
                 end
 
             end
@@ -2049,16 +2053,21 @@ classdef proudData
             imageReg = permute(imageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
             phaseImageReg = permute(phaseImageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
-            % X Y slices NR flip-angles echo-times
-            imagesOut = flip(flip(imageReg,2),3);
-            phaseImagesOut = flip(flip(phaseImageReg,2),3);
+            % Flip dimensions where needed
+            if obj.PHASE_ORIENTATION == 1
+                imagesOut = flip(imageReg,2);
+                phaseImagesOut = flip(phaseImageReg,2);
+            else
+                imagesOut = flip(flip(imageReg,2),1);
+                phaseImagesOut = flip(flip(phaseImageReg,2),1);
+            end
 
             % Return the images object
             for i = 1:dimd
-                for j = 1:dimte
-                    obj.images(:,:,:,i,flipAngle,j) = imagesOut(:,:,:,i,1,j);
-                    obj.phaseImages(:,:,:,i,flipAngle,j) = phaseImagesOut(:,:,:,i,1,j);
-                    obj.phaseImagesOrig(:,:,:,i,flipAngle,j) = phaseImagesOut(:,:,:,i,1,j);
+                for echo = 1:dimte
+                    obj.images(:,:,:,i,flipAngle,echo) = imagesOut(:,:,:,i,1,echo);
+                    obj.phaseImages(:,:,:,i,flipAngle,echo) = phaseImagesOut(:,:,:,i,1,echo);
+                    obj.phaseImagesOrig(:,:,:,i,flipAngle,echo) = phaseImagesOut(:,:,:,i,1,echo);
                 end
             end
 
@@ -2083,7 +2092,7 @@ classdef proudData
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
 
-            if ~app.bartDetected_flag
+            if app.bartDetected_flag
                 % CS reco with BART
 
                 % kSpaceRaw = {coil}[X Y slices NR]
@@ -2185,7 +2194,7 @@ classdef proudData
                 imagesOut = permute(imageReg,[2,1,4,3]);
                 phaseImagesOut = permute(phaseImageReg,[2,1,4,3]);
 
-                % Flip 2nd dimension
+                % Flip dimensions where needed
                 if obj.PHASE_ORIENTATION == 1
                     imagesOut = flip(imagesOut,2);
                     phaseImagesOut = flip(phaseImagesOut,2);
@@ -3182,7 +3191,7 @@ classdef proudData
 
                         % Calibration size
                         kSize = [6,6];
-                        kSkip = round(length(kSpacePicsSum)/3000);
+                        kSkip = round(length(kSpacePicsSum)/2000);
                         kSkip(kSkip < 1) = 1;
 
                         % M1:M2 = indices in trajectory for which k-space value <= calibSize
@@ -3237,7 +3246,7 @@ classdef proudData
 
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
-                            dataCalib = bart(app,'bart nufft',kTraj,kNew);
+                            dataCalib = bart(app,'bart nufft -l 0.01',kTraj,kNew);
                             kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) dimc]);
 
                             % Partial derivatives
@@ -3488,12 +3497,12 @@ classdef proudData
                     % NOTE: coils can be incorporated in the NUFFT, need data first
                     for coil = 1:obj.nrCoils
                         
-                        objn = nufft_3d(traj,dimx);
+                        objn = nufft_3d(traj,dimx,app);
 
                         data = kSpaceRaw{coil}(:,:,slice,dynamic);
                         data = data(:);
 
-                        reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial));
+                        reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
                       
                         reco = imresize(reco,[ndimy ndimx]);
 
@@ -3974,11 +3983,11 @@ classdef proudData
             % Reco
             for coil = 1:obj.nrCoils
 
-                objn = nufft_3d(traj,dims);
+                objn = nufft_3d(traj,dims,app);
 
                 data = kSpace{coil}(:);
 
-                reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial));
+                reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
 
                 image(:,:,:,coil) = reco;
 
@@ -4076,6 +4085,14 @@ classdef proudData
                     % Images = (X, Y, slices, NR, NFA, NE)
                     [~, ~, slices, NR, NFA, NE] = size(im);
 
+                    % Shift image to prevent pixel-shift after FFT
+                    if obj.PHASE_ORIENTATION == 1
+                        im = circshift(im,1,2); 
+                    else
+                        im = circshift(im,1,1); 
+                        im = circshift(im,1,2); 
+                    end
+
                     kSpace = zeros(size(im));
                     for i = 1:slices
                         for j = 1:NR
@@ -4101,6 +4118,15 @@ classdef proudData
                     % Images = (X, Y, Z, NR, NFA, NE)
                     [~, ~, ~, NR, NFA, NE] = size(im);
 
+                    % Shift image to prevent pixel-shift after FFT
+                    if obj.PHASE_ORIENTATION == 1
+                        im = circshift(im,1,2); 
+                        im = circshift(im,1,3); 
+                    else
+                        im = circshift(im,1,1); 
+                        im = circshift(im,1,2); 
+                        im = circshift(im,1,3);
+                    end
 
                     kSpace = zeros(size(im));
                     for j = 1:NR
@@ -4217,7 +4243,7 @@ classdef proudData
                 end
             end
 
-        end
+        end % unwrap3D
 
 
 
@@ -4293,7 +4319,86 @@ classdef proudData
             % Message
             app.TextMessage('Flow calculation is done ...');
 
+        end % calcFlow
+
+
+
+        % Export the reconstruction settings
+        function obj = ExportRecoParametersFcn(obj, app, exportdir)
+
+            pars = strcat(...
+                "------------------------- \n\n", ...
+                "P2ROUD ", app.appVersion,"\n\n", ...
+                "Gustav Strijkers\n", ...
+                "Amsterdam UMC\n", ...
+                "g.j.strijkers@amsterdamumc.nl\n\n", ...
+                "------------------------- \n", ...
+                "\nDATA \n\n", ...
+                "datafile = ", app.MRDfileViewField.Value, "\n", ...
+                "sequence = ", app.SequenceViewField.Value, "\n\n",...
+                "\nDIMENSIONS \n\n", ...
+                "dim_x = ", num2str(size(app.proudDataPars.images,1)), "\n", ...
+                "dim_y = ", num2str(size(app.proudDataPars.images,2)), "\n", ...
+                "dim_z = ", num2str(size(app.proudDataPars.images,3)) , "\n", ...
+                "FOV_x = ", num2str(app.FOVViewField1.Value), " mm \n", ...
+                "FOV_y = ", num2str(app.FOVViewField2.Value), " mm \n", ...
+                "FOV_z = ", num2str(app.FOVViewField3.Value), " mm \n", ...
+                "k_x = ", num2str(app.KMatrixViewField1.Value), "\n", ...
+                "k_y = ", num2str(app.KMatrixViewField2.Value), "\n", ...
+                "k_z = ", num2str(app.KMatrixViewField3.Value), "\n", ...
+                "#slabs = ", num2str(size(app.proudDataPars.rawKspace{1},7)), "\n\n", ...
+                "\nSCAN PARAMETERS\n\n", ...
+                "scan time = ", app.ScanTimeViewField.Value, "\n", ...
+                "time per dynamic = ", app.TimeDynViewField.Value, "\n", ...
+                "TR = ", num2str(app.TRViewField.Value), " ms \n", ...
+                "TE = ", num2str(app.TEViewField.Value), " ms \n", ...
+                "#echoes = ", num2str(app.NEViewField.Value), "\n", ...
+                "#averages = ", num2str(app.NAViewField.Value), "\n", ...
+                "#flip angles = ", num2str(app.NFAViewField.Value), "\n", ...
+                "flip angle(s) = ", app.FAViewField.Value, "\n", ...
+                "#repetitions = ", num2str(app.NRViewField.Value), "\n", ...
+                "trajectory = ", app.TrajectoryViewField.Value, "\n\n", ...
+                "\nRECONSTRUCTION PARAMETERS\n\n", ...
+                "Wavelet = ",num2str(app.WVxyzEditField.Value), "\n", ...
+                "TVxyz = ",num2str(app.TVxyzEditField.Value), "\n", ...
+                "LRxyz = ",num2str(app.LRxyzEditField.Value), "\n", ...
+                "TVtime = ",num2str(app.TVtimeEditField.Value), "\n", ...
+                "CSreco = ",num2str(app.CSRecoCheckBox.Value), "\n\n" ...
+                );
+
+            if strcmp(app.proudDataPars.dataType,'2Dradial')
+                pars = strcat(pars,...
+                    "\n2D radial\n\n", ...
+                    "Gx delay = ",num2str(app.GxDelayEditField.Value),"\n",...
+                    "Gy delay = ",num2str(app.GyDelayEditField.Value),"\n",...
+                    "Gz delay = ",num2str(app.GzDelayEditField.Value),"\n",...
+                    "center echo = ",num2str(app.CenterEchoCheckBox.Value),"\n", ...
+                    "phase correction = ",num2str(app.PhaseCorrectCheckBox.Value),"\n", ...
+                    "density correction = ",num2str(app.DensityCorrectCheckBox.Value),"\n" ...
+                    );
+            end
+
+            if strcmp(app.proudDataPars.dataType,'3Dute')
+                pars = strcat(pars,...
+                    "\n2D radial\n\n", ...
+                    "Gx delay = ",num2str(app.GxDelayEditField.Value),"\n",...
+                    "Gy delay = ",num2str(app.GyDelayEditField.Value),"\n",...
+                    "Gz delay = ",num2str(app.GzDelayEditField.Value),"\n",...
+                    "data offset = ",num2str(app.DataOffsetRadialEditField.Value),"\n",...
+                    "center echo = ",num2str(app.CenterEchoCheckBox.Value),"\n", ...
+                    "phase correction = ",num2str(app.PhaseCorrectCheckBox.Value),"\n", ...
+                    "density correction = ",num2str(app.DensityCorrectCheckBox.Value),"\n" ...
+                    );
+            end
+
+            fid = fopen(strcat(exportdir,filesep,'recoparmeters_',app.tag,'.txt'),'wt');
+            fprintf(fid,pars);
+            fclose(fid);
+
         end
+
+
+
 
 
     end % Public methods

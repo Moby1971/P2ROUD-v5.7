@@ -3836,7 +3836,7 @@ classdef proudData
                 densityOnes(densityOnes > 1) = 1;
                 densityTmp = bart(app,strcat('nufft -d',num2str(dims),':',num2str(dims),':',num2str(dims),' -a'),trajPics,densityOnes);
                 densityPics = bart(app,'nufft ',trajPics,densityTmp);
-                densityPics = densityPics.^(-1/4);
+                densityPics = densityPics.^(-1/3);
                 densityPics(isnan(densityPics)) = 0;
                 densityPics(isinf(densityPics)) = 0;
             end
@@ -3884,6 +3884,15 @@ classdef proudData
             % Absolute value and phase image
             imagesReg = abs(recoImage);
             phaseImagesReg = angle(recoImage);
+
+            % Flip dimensions to correct orientation
+            if obj.PHASE_ORIENTATION == 1
+                imagesReg = flip(imagesReg,3);
+                phaseImagesReg = flip(phaseImagesReg,3);
+            else
+                imagesReg = flip(flip(imagesReg,3),1);
+                phaseImagesReg = flip(flip(phaseImagesReg,3),1);
+            end
 
             % Return the image objects
             obj.images(:,:,:,:,flipAngle,echoTime) = imagesReg;
@@ -4001,8 +4010,12 @@ classdef proudData
             % Root sum of squares coil dimension
             imageOut = rssq(image,4);
 
-            % Adjust dimensions
-            imageOut = permute(imageOut,[2 1 3]);
+            % Flip dimensions to correct orientation
+            if obj.PHASE_ORIENTATION == 1
+                imageOut = flip(imageOut,3);
+            else
+                imageOut = flip(flip(imageOut,3),1);
+            end
 
             % Absolute value and phase image
             imagesReg = abs(imageOut);

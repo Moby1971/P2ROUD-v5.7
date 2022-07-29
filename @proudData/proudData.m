@@ -2512,7 +2512,7 @@ classdef proudData
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime,:);
             end
 
-            if ~app.bartDetected_flag
+            if app.bartDetected_flag
                 % CS reco with BART
 
                 % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
@@ -2632,9 +2632,9 @@ classdef proudData
                     end
 
                     % Concatenate multislab data
-                    imageMultiSlab = imageSlab(:,:,:,:,dims);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,dims);
-                    for i = dims-1:-1:1
+                    imageMultiSlab = imageSlab(:,:,:,:,1);
+                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+                    for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
                         phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                     end
@@ -2818,9 +2818,9 @@ classdef proudData
                     end
 
                     % Concatenate multislab data
-                    imageMultiSlab = imageSlab(:,:,:,:,dims);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,dims);
-                    for i = dims-1:-1:1
+                    imageMultiSlab = imageSlab(:,:,:,:,1);
+                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+                    for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
                         phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                     end
@@ -2976,11 +2976,11 @@ classdef proudData
             end
 
             % Concatenate multislab data
-            imageMultiSlab = imageSlab(:,:,:,:,dims);
-            phaseImageMultiSlab = phaseImageSlab(:,:,:,:,dims);
+            imageMultiSlab = imageSlab(:,:,:,:,1);
+            phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
 
             if dims>1
-                for i = dims-1:-1:1
+                for i = 2:dims
                     imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
                     phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                 end

@@ -9,125 +9,135 @@ classdef proudData
     properties
 
         % Data
-        rawKspace = {};                                     % raw k-space data
-        unsKspace = {};                                     % unsorted k-space data
-        mrdKspace = [];                                     % k-space data from MRD file
-        images = [];                                        % magnitude images
-        phaseImages = [];                                   % phase images
-        phaseImagesOrig = [];                               % original phase images (without unwrapping)
-        flowImages = [];                                    % flow images
-        mask = [];                                          % image mask
-        nsaSpace = [];                                      % number of signal averages per k-point
-        fillingSpace = [];                                  % filling (1 = yes / 0 = no) per k-point
-        pixelSize = [];                                     % pixel size (mm)
-        mrdFooter;                                          % original MRD footer data
-        newMrdFooter;                                       % new MRD footer data for export
-        rprFile;                                            % original RPR file data
+        rawKspace = {}                                      % raw k-space data
+        unsKspace = {}                                      % unsorted k-space data
+        mrdKspace = []                                      % k-space data from MRD file
+        images = []                                         % magnitude images
+        phaseImages = []                                    % phase images
+        phaseImagesOrig = []                                % original phase images (without unwrapping)
+        flowImages = []                                     % flow images
+        mask = []                                           % image mask
+        nsaSpace = []                                       % number of signal averages per k-point
+        fillingSpace = []                                   % filling (1 = yes / 0 = no) per k-point
+        pixelSize = []                                      % pixel size (mm)
+        mrdFooter                                           % original MRD footer data
+        newMrdFooter                                        % new MRD footer data for export
+        rprFile = []                                        % original RPR file data
+        sqlFile = []                                        % SQL file data
         newRprFile;                                         % new RPR file data for export
-        totalVariation = 'T';                               % total variation  (T) or total generalized variation (G)
+        totalVariation = 'T'                                % total variation  (T) or total generalized variation (G)
 
         % Filenames
         filename;
-        PPL = 'unknown';
+        PPL = 'unknown'
 
         % Sequence parameters   
-        dataType = '2D';                                    % data type (2D, 2Dms, 3D, 3Dute, 2Dradial)
-        totalAcqTime = 0;                                   % total acquisition time
-        NO_SAMPLES = 1;                                     % number of samples (readout)
-        NO_SAMPLES_ORIG = 1;                                % original number of samples (readout)
-        NO_VIEWS = 1;                                       % number of views1 (phase encoding 2)
-        NO_VIEWS_ORIG = 1;                                  % original number of views1 (phase encoding 2)
-        NO_VIEWS_2 = 1;                                     % number of views2 (phase encoding 2)
-        NO_VIEWS_2_ORIG = 1;                                % original number of views2 (phase encoding 2)
-        DISCARD = 0;                                        % number of discarded readout points
-        EXPERIMENT_ARRAY = 1;                               % number of experiments/repetitions
-        oversample = 0;                                     % oversample factor in readout direction
-        nr_repetitions = 1;                                 % number of repetitions
-        NO_AVERAGES = 1;                                    % number of averages
-        NO_SLICES = 1;                                      % number of slices
-        NO_ECHOES = 1;                                      % number of echoes
-        nav_on = 0;                                         % navigator on (1) / off (0)
-        VIEWS_PER_SEGMENT = 1;                              % views per segment / interleaved scanning
-        SLICE_THICKNESS = 1;                                % slice thickness (mm)
-        SLICE_SEPARATION = 1;                               % slice separation (mm)
-        SLICE_INTERLEAVE = 1;                               % slice interleave type
-        slab_ratio = 80;                                    % slab ratio (oversampling)
-        r_angle_var;                                        % X angle
-        p_angle_var;                                        % Y angle
-        s_angle_var;                                        % Z angle
-        nr_coils = 1;                                       % MRD file number of coils
-        nrCoils = 1;                                        % number of coils
-        FOV = 30;                                           % field of view (mm)
-        PHASE_ORIENTATION = 0;                              % phase orientation 1 = hor. 0 = vert.
-        FOVf = 8;                                           % field-of-view factor aspect ratio = FOVf/8
-        aspectratio = 1;                                    % image aspect ratio
-        alpha = 20;                                         % flip angle
-        te = 2;                                             % integer echo time (ms)
-        te_us = 0;                                          % additional echo time (us)
-        TE;                                                 % echo time TE = te + te_us
-        tr = 10;                                            % integer TR time (ms)
-        tr_extra_us = 0;                                    % additional TR time (us)
-        TR;                                                 % repitition time TR = tr + tr_extra_us
-        ti = 1000;                                          % inversion time
-        VFA_angles = [];                                    % MRD file flip angles
-        VFA_size = 0;                                       % flip angle array size (0 = no array = 1 flip angle)
-        flipAngleArray = [];                                % array of flip angles
-        frame_loop_on = 0;                                  % CINE imaging on (1) / off (0)
-        radial_on = 0;                                      % radial scanning on (1) / off (0)
-        slice_nav = 0;                                      % slice navigator on (1) / off (0)
-        date;                                               % scan date
-        pixelshift1 = 0;                                    % image shift in views direction
-        pixelshift2 = 0;                                    % image shift in views2 direction
-        coil_scaling = 1;                                   % MRD file coil scaling (not used)
-        coilSensitivities = [1 1 1 1 1 1 1 1];              % coil sensitiviy calibration
-        scanner = 'MRS';                                    % scanner type (MR Solutions)
-        field_strength = 7;                                 % field strength (7T)
-        acqdur = 0;                                         % acquisition duration
-        timeperframe = 0;                                   % time per CINE frame
-        nr_frames = 1;                                      % number of CINE frames
+        dataType = '2D'                                     % data type (2D, 2Dms, 3D, 3Dute, 2Dradial)
+        totalAcqTime = 0                                    % total acquisition time
+        NO_SAMPLES = 1                                      % number of samples (readout)
+        NO_SAMPLES_ORIG = 1                                 % original number of samples (readout)
+        NO_VIEWS = 1                                        % number of views1 (phase encoding 2)
+        NO_VIEWS_ORIG = 1                                   % original number of views1 (phase encoding 2)
+        NO_VIEWS_2 = 1                                      % number of views2 (phase encoding 2)
+        NO_VIEWS_2_ORIG = 1                                 % original number of views2 (phase encoding 2)
+        DISCARD = 0                                         % number of discarded readout points
+        EXPERIMENT_ARRAY = 1                                % number of experiments/repetitions
+        oversample = 0                                      % oversample factor in readout direction
+        nr_repetitions = 1                                  % number of repetitions
+        NO_AVERAGES = 1                                     % number of averages
+        NO_SLICES = 1                                       % number of slices
+        NO_ECHOES = 1                                       % number of echoes
+        nav_on = 0                                          % navigator on (1) / off (0)
+        VIEWS_PER_SEGMENT = 1                               % views per segment / interleaved scanning
+        SLICE_THICKNESS = 1                                 % slice thickness (mm)
+        SLICE_SEPARATION = 1                                % slice separation (mm)
+        SLICE_INTERLEAVE = 1                                % slice interleave type
+        slab_ratio = 80                                     % slab ratio (oversampling)
+        r_angle_var                                         % X angle
+        p_angle_var                                         % Y angle
+        s_angle_var                                         % Z angle
+        nr_coils = 1                                        % MRD file number of coils
+        nrCoils = 1                                         % number of coils
+        FOV = 30                                            % field of view (mm)
+        PHASE_ORIENTATION = 0                               % phase orientation 1 = hor. 0 = vert.
+        FOVf = 8                                            % field-of-view factor aspect ratio = FOVf/8
+        aspectratio = 1                                     % image aspect ratio
+        alpha = 20                                          % flip angle
+        te = 2                                              % integer echo time (ms)
+        te_us = 0                                           % additional echo time (us)
+        TE                                                  % echo time TE = te + te_us
+        tr = 10                                             % integer TR time (ms)
+        tr_extra_us = 0                                     % additional TR time (us)
+        TR                                                  % repitition time TR = tr + tr_extra_us
+        ti = 1000                                           % inversion time
+        VFA_angles = []                                     % MRD file flip angles
+        VFA_size = 0                                        % flip angle array size (0 = no array = 1 flip angle)
+        flipAngleArray = []                                 % array of flip angles
+        frame_loop_on = 0                                   % CINE imaging on (1) / off (0)
+        radial_on = 0                                       % radial scanning on (1) / off (0)
+        slice_nav = 0                                       % slice navigator on (1) / off (0)
+        date                                                % scan date
+        pixelshift1 = 0                                     % image shift in views direction
+        pixelshift2 = 0                                     % image shift in views2 direction
+        coil_scaling = 1                                    % MRD file coil scaling (not used)
+        coilSensitivities = [1 1 1 1 1 1 1 1]               % coil sensitiviy calibration
+        scanner = 'MRS'                                     % scanner type (MR Solutions)
+        field_strength = 7                                  % field strength (7T)
+        acqdur = 0                                          % acquisition duration
+        timeperframe = 0                                    % time per CINE frame
+        nr_frames = 1                                       % number of CINE frames
 
         % K-space trajectory related
-        pe1_order = 0;                                      % views2 phase-encoding ordering
-        pe2_centric_on = 0;                                 % views2 centric ordering true (1) / false (0)
-        pe2_traj = 0;                                       % views2 trajectory type
-        gp_var_mul = [];                                    % MRD phase encoding array
-        gp_var_proud = [];                                  % P2ROUD k-space phase-encoding array (legacy)
-        trajType = '';                                      % trajectory type (3Dute, 2Dradial)
-        seqTrajectory;                                      % k-space trajectory
-        proudArray = [];                                    % P2ROUD sequence array
-        gradTrajectory = [];                                % gradient calibration trajectory (3D UTE)
-
+        pe1_order = 0                                       % views2 phase-encoding ordering
+        pe2_centric_on = 0                                  % views2 centric ordering true (1) / false (0)
+        pe2_traj = 0                                        % views2 trajectory type
+        gp_var_mul = []                                     % MRD phase encoding array
+        gp_var_proud = []                                   % P2ROUD k-space phase-encoding array (legacy)
+        trajType = ''                                       % trajectory type (3Dute, 2Dradial)
+        seqTrajectory                                       % k-space trajectory
+        proudArray = []                                     % P2ROUD sequence array
+        gradTrajectory = []                                 % gradient calibration trajectory (3D UTE)
 
         % Flow related
-        venc = 0;                                           % flow encoding VENC
-        vencAmp = [];                                       % MRD file VENC
-        flowCompOn = 0;                                     % flow compensation on (1) or off (0)
-        vencTable = [];                                     % VENC orientation table
+        venc = 0                                            % flow encoding VENC
+        vencAmp = []                                        % MRD file VENC
+        flowCompOn = 0                                      % flow compensation on (1) or off (0)
+        vencTable = []                                      % VENC orientation table
    
         % Navigator related
-        no_samples_nav = 10;                                % number of navigator samples
-        no_samples_discard = 35;                            % number of points discarded after navigator
+        no_samples_nav = 10                                 % number of navigator samples
+        no_samples_discard = 35                             % number of points discarded after navigator
 
         % Segmentation related
-        threshold = 0;                                      % segmentation threshold
+        threshold = 0                                       % segmentation threshold
         
         % Flags
-        validFile_flag = false;                             % valid MRD file true/false
-        validReco_flag = false;                             % valid reconstruction true/false
-        validVenc_flag = false;                             % valid VENC values true/false
-        validFlow_flag = false;                             % valid flow images true/false
-        validMask_flag = false;                             % valid mask true/false
-        multiEchoes_flag = false;                           % multiple echoes true/false
-        multiRepetitions_flag = false;                      % multiple repetitions true/false
-        multiFlipAngles_flag = false;                       % multiple flip angles true/false
-        multiCoil_flag = false;                             % multiple receiver coils true/false
-        multiSlab_flag = false;                             % multiple 3D slabs true/false
+        validFile_flag = false                              % valid MRD file true/false
+        validReco_flag = false                              % valid reconstruction true/false
+        validVenc_flag = false                              % valid VENC values true/false
+        validFlow_flag = false                              % valid flow images true/false
+        validMask_flag = false                              % valid mask true/false
+        multiEchoes_flag = false                            % multiple echoes true/false
+        multiRepetitions_flag = false                       % multiple repetitions true/false
+        multiFlipAngles_flag = false                        % multiple flip angles true/false
+        multiCoil_flag = false                              % multiple receiver coils true/false
+        multiSlab_flag = false                              % multiple 3D slabs true/false
         validTrajectory_flag = false                        % valid k-space trajectory true/false
-        rprFile_flag = false;                               % RPR file data available true/false
-        proudRecoScan_flag = false;                         % MRD data from P2ROUD app true/false
-        retroRecoScan_flag = false;                         % MRD data from Retrospective app true/false
-        coilActive_flag = [1 1 1 1 1 1 1];                  % active coil (1 = yes / 0 = no)
-
+        rprFile_flag = false                                % RPR file data available true/false
+        proudRecoScan_flag = false                          % MRD data from P2ROUD app true/false
+        retroRecoScan_flag = false                          % MRD data from Retrospective app true/false
+        coilActive_flag = [1 1 1 1 1 1 1]                   % active coil (1 = yes / 0 = no)
+        sqlFlag = false                                     % SQL file available true / false
+  
+        % Parameters from SQL file
+        SQLnumberOfSlices = 1                               % number of slices
+        SQLsliceGap = 0                                     % slice gap
+        SQLangleX = 0                                       % angle X
+        SQLangleY = 0                                       % angle Y
+        SQLangleZ = 0                                       % angle Z
+        SQLoffsetX = 0                                      % offset X
+        SQLoffsetY = 0                                      % offset Y
+        SQLoffsetZ = 0                                      % offset Z
 
     end % properties
 
@@ -143,6 +153,8 @@ classdef proudData
     % obj = readBtypeData(obj, app, mrdfile, flist)
     % obj = readMrdFooter(obj, mrdfile)
     % obj = makeMrdFooter(obj, par)
+    % obj = readSQLfile(obj, app, filename)
+    % obj = sqlParameters(obj, app)
     % obj = readRprFile(obj, app, fn)
     % obj = writeToRprFile(obj, filename)
     % obj = makeRprFile(obj, par)
@@ -850,6 +862,75 @@ classdef proudData
             obj.newMrdFooter  = inputfooter;
 
         end % makeMrdFooter
+
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Read SQL file
+        % ---------------------------------------------------------------------------------
+        function obj = readSQLfile(obj, app, filename)
+            
+            try
+                fid = fopen(filename,'r');
+                obj.sqlFile = char(fread(fid,Inf,'uchar')');
+                fclose(fid);
+                obj.sqlFlag = true;
+            catch
+                obj.sqlFile = '';
+                obj.sqlFlag = false;
+                app.TextMessage('WARNING: SQL file not found ...');
+            end
+
+        end % readSQLfile
+
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Get some parameters from SQL file
+        % ---------------------------------------------------------------------------------
+        function obj = sqlParameters(obj, app)
+
+            if obj.sqlFlag
+
+                if ~isempty(obj.sqlFile)
+
+                    sqlData = obj.sqlFile;
+
+                    try
+
+                        % Group settings
+                        groupSettings = strfind(sqlData,'[GROUP SETTINGS]');
+                        posStart = strfind(sqlData(groupSettings:end),'VALUES(');
+                        posStart = posStart(1)+groupSettings+6;
+                        posEnd = strfind(sqlData(posStart:end),')');
+                        posEnd = posEnd(1)+posStart-2;
+                        groupData = sqlData(posStart:posEnd);
+                        values = textscan(groupData, '%f %s %f %f %f %f %f %f %f %f %f %f','Delimiter',',');
+
+                        obj.SQLnumberOfSlices = values{4};
+                        obj.SQLsliceGap = values{5};
+                        obj.SQLangleX = values{6};
+                        obj.SQLangleY = values{7};
+                        obj.SQLangleZ = values{8};
+                        obj.SQLoffsetX = values{9};
+                        obj.SQLoffsetY = values{10};
+                        obj.SQLoffsetZ = values{11};
+
+                    catch ME
+
+                        app.TextMessage(ME.message);
+                        app.TextMessage('WARNING: Something went wrong analyzing SQL file group settings ...');
+                        app.SetStatus(1);
+
+                    end
+
+                end
+
+            end
+
+        end % sqlParameters
 
 
 
@@ -2621,26 +2702,26 @@ classdef proudData
                     phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
                 end
 
+                % Slab ratio + discard
                 if dims>1
-                    % Slab ratio + discard
-                    nrDiscard = round((dimz*(100-obj.slab_ratio)/200) + obj.DISCARD*dimz/dimzo);
+                    nrDiscard = round(-0.5*dimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                     if nrDiscard>0
                         imageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
-                        phaseImageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
                         imageSlab(:,:,1:nrDiscard,:,:) = [];
+                        phaseImageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
                         phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
                     end
+                end
 
-                    % Concatenate multislab data
-                    imageMultiSlab = imageSlab(:,:,:,:,1);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+                % Concatenate multislab data
+                imageMultiSlab = imageSlab(:,:,:,:,1);
+                phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+
+                if dims>1
                     for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
                         phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                     end
-                else
-                    imageMultiSlab = imageSlab(:,:,:,:,1);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
                 end
 
                 % Return the image object
@@ -2807,26 +2888,26 @@ classdef proudData
 
                 end
 
+                % Slab ratio + discard
                 if dims>1
-                    % Slab ratio + discard
-                    nrDiscard = round((dimz*(100-obj.slab_ratio)/200) + obj.DISCARD*dimz/dimz);
+                    nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                     if nrDiscard>0
-                        imageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
-                        phaseImageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
+                        imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
                         imageSlab(:,:,1:nrDiscard,:,:) = [];
+                        phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
                         phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
                     end
+                end
 
-                    % Concatenate multislab data
-                    imageMultiSlab = imageSlab(:,:,:,:,1);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+                % Concatenate multislab data
+                imageMultiSlab = imageSlab(:,:,:,:,1);
+                phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
+
+                if dims>1
                     for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
                         phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                     end
-                else
-                    imageMultiSlab = imageSlab(:,:,:,:,1);
-                    phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
                 end
 
                 % Return the image object
@@ -2966,7 +3047,7 @@ classdef proudData
 
             % Slab ratio + discard
             if dims>1
-                nrDiscard = round((ndimz*(100-obj.slab_ratio)/200) + (obj.DISCARD*ndimz/dimz));
+                nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                 if nrDiscard>0
                     imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
                     imageSlab(:,:,1:nrDiscard,:,:) = [];

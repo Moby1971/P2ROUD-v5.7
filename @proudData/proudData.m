@@ -139,6 +139,13 @@ classdef proudData
         SQLoffsetY = 0                                      % offset Y
         SQLoffsetZ = 0                                      % offset Z
 
+        % Image shifts
+        xShift = 0                                          % image shift in X direction
+        yShift = 0                                          % image shift in Y direction
+        fov_read_off = 0                                    % read-offset from MRD file
+        fov_phase_off = 0                                   % phase-offset from MRD file
+        SAMPLE_PERIOD                                       % sample period 
+
     end % properties
 
 
@@ -183,6 +190,7 @@ classdef proudData
     % obj = unwrap3D(obj)
     % obj = calcFlow(obj)
     % obj = ExportRecoParametersFcn(obj, app, exportdir)
+    % obj = calc2DimageShift(obj, image, app)
     % 
     %
     % -----------------------------------------------------------------
@@ -208,6 +216,8 @@ classdef proudData
     % X = fft2Dmri(x)
     % x = ifft2Dmri(X)
     % traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
+    % y = image2Dshift(im, xShift, yShift)
+    %
     %
 
 
@@ -499,6 +509,18 @@ classdef proudData
                 obj.flowCompOn = parameters.flow_comp_on;
             end
 
+            if isfield(parameters,'fov_read_off')
+                obj.fov_read_off = parameters.fov_read_off;
+            end
+
+            if isfield(parameters,'fov_phase_off')
+                obj.fov_phase_off = parameters.fov_phase_off;
+            end
+
+            if isfield(parameters,'SAMPLE_PERIOD')
+                obj.SAMPLE_PERIOD = parameters.SAMPLE_PERIOD;
+            end
+            
         end % readProudData
 
 
@@ -3472,6 +3494,21 @@ classdef proudData
             % Rearrange to orientation: x, y, slices, dynamics
             imageOut = permute(igrid,[1, 2, 14, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
 
+            % Flip for phase-orientation is vertical
+            if obj.PHASE_ORIENTATION == 0
+                imageOut = flip(flip(imageOut,2),1);
+            end
+
+            % Get the in-plane image shift
+            obj = obj.get2DimageShift(imageOut, app);
+
+            % Apply the shift on sub-pixel level
+            for dyn = 1:size(imageOut,4)
+                for slice = 1:size(imageOut,3)
+                    imageOut(:,:,slice,dyn) = proudData.image2Dshift(squeeze(imageOut(:,:,slice,dyn)),obj.yShift,obj.xShift);
+                end
+            end
+
             % Absolute value and phase image
             imagesReg = abs(imageOut);
             phaseImagesReg = angle(imageOut);
@@ -3603,8 +3640,20 @@ classdef proudData
             % Root sum of squares coil dimension
             imageOut = rssq(image,5);
 
-            % Adjust dimensions
-            imageOut = permute(imageOut,[1 2 3 4]); % Seems to be the right orientation
+            % Flip for phase-orientation is vertical
+            if obj.PHASE_ORIENTATION == 0
+                imageOut = flip(flip(imageOut,2),1);
+            end
+
+             % Get the in-plane image shift
+            obj = obj.get2DimageShift(imageOut, app);
+
+            % Apply the shift on sub-pixel level
+            for dyn = 1:size(imageOut,4)
+                for slice = 1:size(imageOut,3)
+                    imageOut(:,:,slice,dyn) = proudData.image2Dshift(squeeze(imageOut(:,:,slice,dyn)),obj.yShift,obj.xShift);
+                end
+            end
 
             % Absolute value and phase image
             imagesReg = abs(imageOut);
@@ -4493,6 +4542,42 @@ classdef proudData
 
 
 
+        % ---------------------------------------------------------------------------------
+        % Retrieve the 2D image shift for off-center and oblique Radial sequence
+        % ---------------------------------------------------------------------------------
+        function obj = get2DimageShift(obj, image, app)
+
+            % Image dimensions in pixels
+            dimx = size(image,1);
+            dimy = size(image,2);
+     
+            % Calculate the shift
+            for i = 1:length(obj.fov_read_off)
+                relShiftX = dimx*obj.fov_read_off(i)/4000;
+                relShiftY = dimy*obj.fov_phase_off(i)/4000;
+            end
+       
+            % Different readout / phase depending on phase_orientation value
+            if obj.PHASE_ORIENTATION
+
+                shiftInX =  relShiftX; 
+                shiftInY =  -relShiftY; 
+
+            else
+
+                shiftInX =  -relShiftY; 
+                shiftInY =  -relShiftX; 
+
+            end
+
+            % Report the values back / return the object
+            obj.xShift = shiftInX;
+            obj.yShift = shiftInY;
+
+            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels ...',shiftInX(1),shiftInY(1)));
+
+        end % get2DimageShift
+
 
 
     end % Public methods
@@ -4751,13 +4836,13 @@ classdef proudData
                 %PPR_type_1 keywords have single value, e.g. ":FOV 300"
                 PPR_type_1 = [8 42:47];
                 %PPR_type_2 keywords have single variable and single value, e.g. ":NO_SAMPLES no_samples, 16"
-                PPR_type_2 = [4 7 9:11 15:21 25 31 33 41 49];
+                PPR_type_2 = [4 7  15:21 25 31 33 41 49];
                 PPR_type_3 = 48; % VAR keyword only (syntax same as above)
                 PPR_type_4 = [28 29]; % :SAMPLE_PERIOD sample_period, 300, 19, "33.3 KHz  30 ?s" and SAMPLE_PERIOD_2 - read the first number=timeincrement in 100ns
                 %PPR_type_5 keywords have single variable and two values, e.g. ":SLICE_THICKNESS gs_var, -799, 100"
                 PPR_type_5 = [34 35];
                 % KEYWORD [pre-prompt,] [post-prompt,] [min,] [max,] default, variable [,scale] [,further parameters ...];
-                PPR_type_6 = [39 50:52]; % VAR_ARRAY and angles keywords
+                PPR_type_6 = [39 9:11 50:52]; % VAR_ARRAY and angles keywords
                 PPR_type_7 = [54 55]; % IM_ORIENTATION and IM_OFFSETS (SUR only)
 
                 par = struct('filename',filename);
@@ -5356,6 +5441,26 @@ classdef proudData
             end
 
         end % twoDradialTrajectory
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Fractional 2D image shift
+        % ---------------------------------------------------------------------------------
+        function y = image2Dshift(im, xShift, yShift)
+            
+            % Shift in pixels, can be fractional
+            H = proudData.ifft2Dmri(im);
+
+            % Create linear grid
+            [xF,yF] = meshgrid(-size(im,2)/2:size(im,2)/2-1,-size(im,1)/2:size(im,1)/2-1);
+
+            % Perform the shift
+            H = H.*exp(-1i*2*pi.*(xF*xShift/size(im,2)+yF*yShift/size(im,1)));
+            
+            y = proudData.fft2Dmri(H);
+
+        end % imageShift
 
 
 

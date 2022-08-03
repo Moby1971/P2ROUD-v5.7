@@ -4,7 +4,8 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % July 2022
+    % August 2022
+    %
 
     properties
 
@@ -4565,8 +4566,8 @@ classdef proudData
 
             else
 
-                shiftInX =  -relShiftY; 
-                shiftInY =  -relShiftX; 
+                shiftInX =   -relShiftX; 
+                shiftInY =   -relShiftY; 
 
             end
 

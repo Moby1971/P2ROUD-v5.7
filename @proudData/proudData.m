@@ -2911,7 +2911,7 @@ classdef proudData
 
                 end
 
-                % Slab ratio + discard
+                % Discard slab overlap
                 if dims>1
                     nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                     if nrDiscard>0
@@ -2925,7 +2925,6 @@ classdef proudData
                 % Concatenate multislab data
                 imageMultiSlab = imageSlab(:,:,:,:,1);
                 phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
-
                 if dims>1
                     for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
@@ -3068,7 +3067,7 @@ classdef proudData
                 phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
             end
 
-            % Slab ratio + discard
+            % Discard slab overlap
             if dims>1
                 nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                 if nrDiscard>0
@@ -3082,7 +3081,6 @@ classdef proudData
             % Concatenate multislab data
             imageMultiSlab = imageSlab(:,:,:,:,1);
             phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
-
             if dims>1
                 for i = 2:dims
                     imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
@@ -5461,7 +5459,7 @@ classdef proudData
             
             y = proudData.fft2Dmri(H);
 
-        end % imageShift
+        end % image2Dshift
 
 
 

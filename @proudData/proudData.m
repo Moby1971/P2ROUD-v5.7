@@ -36,6 +36,7 @@ classdef proudData
         dataType = '2D'                                     % data type (2D, 2Dms, 3D, 3Dute, 2Dradial)
         totalAcqTime = 0                                    % total acquisition time
         NO_SAMPLES = 1                                      % number of samples (readout)
+        SAMPLE_PERIOD                                       % sample period 
         NO_SAMPLES_ORIG = 1                                 % original number of samples (readout)
         NO_VIEWS = 1                                        % number of views1 (phase encoding 2)
         NO_VIEWS_ORIG = 1                                   % original number of views1 (phase encoding 2)
@@ -140,12 +141,21 @@ classdef proudData
         SQLoffsetY = 0                                      % offset Y
         SQLoffsetZ = 0                                      % offset Z
 
-        % Image shifts
+        % Image shifts & orientations
         xShift = 0                                          % image shift in X direction
         yShift = 0                                          % image shift in Y direction
         fov_read_off = 0                                    % read-offset from MRD file
         fov_phase_off = 0                                   % phase-offset from MRD file
-        SAMPLE_PERIOD                                       % sample period 
+        LRvec = [1 0 0]'                                    % left-right orientation vector
+        APvec = [0 1 0]'                                    % anterior-posterior orientation vector
+        HFvec = [0 0 1]'                                    % head-feet orientation vector
+        topLabel = ' ';                                     % top label
+        bottomLabel = ' ';                                  % bottom label
+        leftLabel = ' ';                                    % left label
+        rightLabel = ' ';                                   % right label
+        frontLabel = ' ';                                   % front label
+        backLabel = ' ';                                    % back label
+        
 
     end % properties
 
@@ -217,7 +227,7 @@ classdef proudData
     % X = fft2Dmri(x)
     % x = ifft2Dmri(X)
     % traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
-    % y = image2Dshift(im, xShift, yShift)
+    % imOut = image2Dshift(imIn, xShift, yShift)
     %
     %
 
@@ -941,11 +951,14 @@ classdef proudData
                         obj.SQLoffsetY = values{10};
                         obj.SQLoffsetZ = values{11};
 
+
                     catch ME
 
                         app.TextMessage(ME.message);
                         app.TextMessage('WARNING: Something went wrong analyzing SQL file group settings ...');
                         app.SetStatus(1);
+
+                        obj.sqlFlag = false;
 
                     end
 
@@ -954,6 +967,66 @@ classdef proudData
             end
 
         end % sqlParameters
+
+
+        % ---------------------------------------------------------------------------------
+        % Calculate image orientation
+        % ---------------------------------------------------------------------------------
+        function obj = imageOrient(obj, app)
+
+            try
+
+                % Start from axial orientation
+                obj.LRvec = [1 0 0]';
+                obj.APvec = [0 1 0]';
+                obj.HFvec = [0 0 1]';
+
+                % Rotate the vectors according to the angle values
+                % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
+                tinyAngle = 0.00001;
+                obj.LRvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.LRvec;
+                obj.APvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.APvec;
+                obj.HFvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.HFvec;
+
+                % Determine the label combination
+                % This is done by determining the main direction of the vector
+                [~, indxLR1] = max(abs(obj.LRvec(:)));
+                [~, indxAP1] = max(abs(obj.APvec(:)));
+                [~, indxHF1] = max(abs(obj.HFvec(:)));
+                indxLR2 = sign(obj.LRvec(indxLR1));
+                indxAP2 = sign(obj.APvec(indxAP1));
+                indxHF2 = sign(obj.HFvec(indxHF1));
+                indxLR2(indxLR2 == -1) = 2;
+                indxAP2(indxAP2 == -1) = 2;
+                indxHF2(indxHF2 == -1) = 2;
+
+                % The opposing labels
+                labelsPrimary   = ['L','R'; 'P','A' ; 'F','H'];
+                labelsSecondary = ['R','L'; 'A','P' ; 'H','F'];
+
+                % Assign the labels
+                obj.leftLabel   = labelsPrimary(indxLR1,indxLR2);
+                obj.rightLabel  = labelsSecondary(indxLR1,indxLR2);
+                obj.topLabel    = labelsPrimary(indxAP1,indxAP2);
+                obj.bottomLabel = labelsSecondary(indxAP1,indxAP2);
+                obj.frontLabel  = labelsPrimary(indxHF1,indxHF2);
+                obj.backLabel   = labelsSecondary(indxHF1,indxHF2);
+
+            catch ME
+
+                app.TextMessage(ME.message);
+
+                obj.leftLabel   = ' ';
+                obj.rightLabel  = ' ';
+                obj.topLabel    = ' ';
+                obj.bottomLabel = ' ';
+                obj.frontLabel  = ' ';
+                obj.backLabel   = ' ';
+
+            end
+
+        end % imageOrient
+
 
 
 
@@ -4939,21 +5012,27 @@ classdef proudData
 
             % Loop through separate lines
             if fid~=-1
+
                 while 1
+
                     if skipline
                         line=nextline;
                         skipline=0;
                     else
                         line=fgetl(fid);
                     end
+
                     % Testing the text lines
                     while length(line)<2
                         line=fgetl(fid);
                     end
+
                     % Parameters and optional size of parameter are on lines starting with '##'
                     if line(1:2) == '##' %#ok<*BDSCA>
+
                         % Parameter extracting and formatting
                         % Read parameter name
+
                         paramname = fliplr(strtok(fliplr(strtok(line,'=')),'#'));
                         % Check for illegal parameter names starting with '$' and correct (Matlab does not accepts variable names starting with $)
                         if paramname(1) == '$'
@@ -4962,25 +5041,31 @@ classdef proudData
                         elseif paramname(1:3) == 'END'
                             break
                         end
+
                         % Parameter value formatting
                         paramvalue = fliplr(strtok(fliplr(line),'='));
 
                         % Check if parameter values are in a matrix and read the next line
                         if paramvalue(1) == '('
                             paramvaluesize = str2num(fliplr(strtok(fliplr(strtok(paramvalue,')')),'(')));
+                            
                             % Create an empty matrix with size 'paramvaluesize' check if only one dimension
                             if ~isempty(paramvaluesize)
+
                                 if size(paramvaluesize,2) == 1
                                     paramvaluesize = [paramvaluesize,1];
                                 end
+
                                 % Read the next line
                                 nextline = fgetl(fid);
+
                                 % See whether next line contains a character array
                                 if nextline(1) == '<'
                                     paramvalue = fliplr(strtok(fliplr(strtok(nextline,'>')),'<')); %#ok<*NASGU>
                                 elseif strcmp(nextline(1),'L') || strcmp(nextline(1),'A') || strcmp(nextline(1),'H')
                                     paramvalue = nextline;
                                 else
+
                                     % Check if matrix has more then one dimension
                                     if paramvaluesize(2) ~= 1
                                         paramvaluelong = str2num(nextline);
@@ -4999,6 +5084,7 @@ classdef proudData
                                             end
                                         end
                                     else
+
                                         % If only 1 dimension just assign whole line to paramvalue
                                         paramvalue = str2num(nextline);
                                         if ~isempty(str2num(nextline))
@@ -5009,9 +5095,11 @@ classdef proudData
                                         end
                                     end
                                 end
+
                             else
                                 paramvalue='';
                             end
+
                         end
 
                         % Add paramvalue to structure.paramname
@@ -5025,10 +5113,13 @@ classdef proudData
                                     paramname(findstr(paramname,'_')+2:length(paramname)) '= paramvalue;']); %#ok<*FSTR>
                             end
                         end
+
                     elseif line(1:2) == '$$'
                         % The two $$ lines are not parsed for now
                     end
+
                 end
+
                 % Close file
                 fclose(fid);
 
@@ -5359,7 +5450,7 @@ classdef proudData
 
             % VEC   Vectorize.
             % VEC(X), where X is a vector, matrix, or N-D array, returns a column vector
-            % Containing all of the elements of X; i.e., VEC(X)=X(:).
+            % Containing all of the elements of X; i.e., VEC(X) = X(:).
 
             v = reshape(x, numel(x), 1);
 
@@ -5446,18 +5537,22 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Fractional 2D image shift
         % ---------------------------------------------------------------------------------
-        function y = image2Dshift(im, xShift, yShift)
+        function imOut = image2Dshift(imIn, xShift, yShift)
             
-            % Shift in pixels, can be fractional
-            H = proudData.ifft2Dmri(im);
+            % Shift image on sub-pixel level in x- and y-directions
+
+            % Transform image to k-space
+            H = proudData.ifft2Dmri(imIn);
 
             % Create linear grid
-            [xF,yF] = meshgrid(-size(im,2)/2:size(im,2)/2-1,-size(im,1)/2:size(im,1)/2-1);
+            [xF,yF] = meshgrid(-size(imIn,2)/2:size(imIn,2)/2-1,-size(imIn,1)/2:size(imIn,1)/2-1);
 
-            % Perform the shift
-            H = H.*exp(-1i*2*pi.*(xF*xShift/size(im,2)+yF*yShift/size(im,1)));
+            % Perform the shift in k-space
+            H = H.*exp(-1i*2*pi.*(xF*xShift/size(imIn,2)+yF*yShift/size(imIn,1)));
             
-            y = proudData.fft2Dmri(H);
+            % Transform image back from k-space
+            % Note: this is a complex image now
+            imOut = proudData.fft2Dmri(H);
 
         end % image2Dshift
 

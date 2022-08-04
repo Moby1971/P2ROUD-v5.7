@@ -874,15 +874,16 @@ classdef proudData
                     % Slice thickness is a special case
                     if contains(txt,'SLICE_THICKNESS')
                         commapos = [];
-                        commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+6),' ');
+                        commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+8),',');
                         inputfooter = insertAfter(inputfooter,pos+length(txt)+commapos,'      ');
                         pos = pos+commapos;
                     end
 
                     try
+
+                        disp(num2str(var))
                         % Replace the values with the new ones
-                        newtext = [num2str(var),'     '];
-                        newtext = newtext(1:6);
+                        newtext = strcat(num2str(var));
                         inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
                     catch
                     end
@@ -2692,6 +2693,9 @@ classdef proudData
             if app.bartDetected_flag
                 % CS reco with BART
 
+                % Use total variation (TGV takes too long)
+                obj.totalVariation = 'T';
+
                 % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
                 %                    1 2 3    4     5 6  7
                 dimx = app.XEditField.Value;
@@ -3753,6 +3757,7 @@ classdef proudData
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
             dimc = obj.nrCoils;
+            obj.totalVariation = 'T'; % Use total variation, instead of TGV 
 
             % Original kx(readout), ky(spokes), 1, dynamics, flip-angle, echo-time
             kSpaceRaw = cell(dimc);

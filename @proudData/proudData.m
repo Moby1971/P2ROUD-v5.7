@@ -880,8 +880,6 @@ classdef proudData
                     end
 
                     try
-
-                        disp(num2str(var))
                         % Replace the values with the new ones
                         newtext = strcat(num2str(var));
                         inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
@@ -977,7 +975,7 @@ classdef proudData
 
             try
 
-                % Start from axial orientation
+                % Start from axial orientation, head first, supine
                 obj.LRvec = [1 0 0]';
                 obj.APvec = [0 1 0]';
                 obj.HFvec = [0 0 1]';
@@ -985,12 +983,12 @@ classdef proudData
                 % Rotate the vectors according to the angle values
                 % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
                 tinyAngle = 0.00001;
-                obj.LRvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.LRvec;
-                obj.APvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.APvec;
-                obj.HFvec = rotx(obj.SQLangleX+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotz(obj.SQLangleZ+tinyAngle)*obj.HFvec;
+                obj.LRvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.LRvec;
+                obj.APvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.APvec;
+                obj.HFvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.HFvec;
 
                 % Determine the label combination
-                % This is done by determining the main direction of the vector
+                % This is done by determining the main direction of the vectors
                 [~, indxLR1] = max(abs(obj.LRvec(:)));
                 [~, indxAP1] = max(abs(obj.APvec(:)));
                 [~, indxHF1] = max(abs(obj.HFvec(:)));
@@ -1001,17 +999,20 @@ classdef proudData
                 indxAP2(indxAP2 == -1) = 2;
                 indxHF2(indxHF2 == -1) = 2;
 
-                % The opposing labels
-                labelsPrimary   = ['L','R'; 'P','A' ; 'F','H'];
-                labelsSecondary = ['R','L'; 'A','P' ; 'H','F'];
+                labelsPrimary   = ['L','R' ; 'A','P' ; 'H','F'];
+                labelsSecondary = ['R','L' ; 'P','A' ; 'F','H'];
+            
+                % Sort the labels according to the starting orientation
+                labelsPrimary   = [labelsPrimary(indxLR1,indxLR2),labelsPrimary(indxAP1,indxAP2),labelsPrimary(indxHF1,indxHF2)];
+                labelsSecondary = [labelsSecondary(indxLR1,indxLR2),labelsSecondary(indxAP1,indxAP2),labelsSecondary(indxHF1,indxHF2)];
 
                 % Assign the labels
-                obj.leftLabel   = labelsPrimary(indxLR1,indxLR2);
-                obj.rightLabel  = labelsSecondary(indxLR1,indxLR2);
-                obj.topLabel    = labelsPrimary(indxAP1,indxAP2);
-                obj.bottomLabel = labelsSecondary(indxAP1,indxAP2);
-                obj.frontLabel  = labelsPrimary(indxHF1,indxHF2);
-                obj.backLabel   = labelsSecondary(indxHF1,indxHF2);
+                obj.leftLabel   = labelsPrimary(1);
+                obj.rightLabel  = labelsSecondary(1);
+                obj.topLabel    = labelsPrimary(2);
+                obj.bottomLabel = labelsSecondary(2);
+                obj.frontLabel  = labelsPrimary(3);
+                obj.backLabel   = labelsSecondary(3);
 
             catch ME
 

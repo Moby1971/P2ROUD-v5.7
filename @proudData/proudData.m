@@ -27,6 +27,7 @@ classdef proudData
         sqlFile = []                                        % SQL file data
         newRprFile;                                         % new RPR file data for export
         totalVariation = 'T'                                % total variation  (T) or total generalized variation (G)
+        memSize                                             % for testing testing memory size
 
         % Filenames
         filename;
@@ -153,10 +154,7 @@ classdef proudData
         bottomLabel = ' ';                                  % bottom label
         leftLabel = ' ';                                    % left label
         rightLabel = ' ';                                   % right label
-        frontLabel = ' ';                                   % front label
-        backLabel = ' ';                                    % back label
-        
-
+     
     end % properties
 
 
@@ -969,66 +967,69 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Calculate image orientation
+        % Calculate image orientation labels
         % ---------------------------------------------------------------------------------
-        function obj = imageOrient(obj, app)
+        function obj = imageOrientLabels(obj, app)
 
+            obj.leftLabel   = ' ';
+            obj.rightLabel  = ' ';
+            obj.topLabel    = ' ';
+            obj.bottomLabel = ' ';
+       
             try
 
-                % Start from axial orientation, head first, supine
-                obj.LRvec = [1 0 0]';
-                obj.APvec = [0 1 0]';
-                obj.HFvec = [0 0 1]';
+                if ismember(app.OrientationSpinner.Value,[1 7 10])
 
-                % Rotate the vectors according to the angle values
-                % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
-                tinyAngle = 0.00001;
-                obj.LRvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.LRvec;
-                obj.APvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.APvec;
-                obj.HFvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.HFvec;
+                    % Start from axial orientation, head first, supine
+                    obj.LRvec = [ 1  0  0 ]';
+                    obj.APvec = [ 0  1  0 ]';
+                    obj.HFvec = [ 0  0  1 ]';
+                  
+                    % Rotate the vectors according to the angle values
+                    % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
+                    tinyAngle = 0.00001;
+                    obj.LRvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.LRvec;
+                    obj.APvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.APvec;
+                    obj.HFvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.HFvec;
 
-                % Determine the label combination
-                % This is done by determining the main direction of the vectors
-                [~, indxLR1] = max(abs(obj.LRvec(:)));
-                [~, indxAP1] = max(abs(obj.APvec(:)));
-                [~, indxHF1] = max(abs(obj.HFvec(:)));
-                indxLR2 = sign(obj.LRvec(indxLR1));
-                indxAP2 = sign(obj.APvec(indxAP1));
-                indxHF2 = sign(obj.HFvec(indxHF1));
-                indxLR2(indxLR2 == -1) = 2;
-                indxAP2(indxAP2 == -1) = 2;
-                indxHF2(indxHF2 == -1) = 2;
+                    % Determine the orientation combination
+                    % This is done by determining the main direction of the vectors
+                    [~, indxLR1] = max(abs(obj.LRvec(:)));
+                    [~, indxAP1] = max(abs(obj.APvec(:)));
+                    [~, indxHF1] = max(abs(obj.HFvec(:)));
+                    indxLR2 = sign(obj.LRvec(indxLR1));
+                    indxAP2 = sign(obj.APvec(indxAP1));
+                    indxHF2 = sign(obj.HFvec(indxHF1));
+                    indxLR2(indxLR2 == -1) = 2;
+                    indxAP2(indxAP2 == -1) = 2;
+                    indxHF2(indxHF2 == -1) = 2;
 
-                labelsPrimary   = ['L','R' ; 'A','P' ; 'H','F'];
-                labelsSecondary = ['R','L' ; 'P','A' ; 'F','H'];
-            
-                % Sort the labels according to the starting orientation
-                labelsPrimary   = [labelsPrimary(indxLR1,indxLR2),labelsPrimary(indxAP1,indxAP2),labelsPrimary(indxHF1,indxHF2)];
-                labelsSecondary = [labelsSecondary(indxLR1,indxLR2),labelsSecondary(indxAP1,indxAP2),labelsSecondary(indxHF1,indxHF2)];
+                    labelsPrimary   = [ 'R','L' ; 'A','P' ; 'F','H'];
+                    labelsSecondary = [ 'L','R' ; 'P','A' ; 'H','F'];
+               
+                    % Sort the labels according to the starting orientation
+                    labelsPrimary   = [labelsPrimary(indxLR1,indxLR2),labelsPrimary(indxAP1,indxAP2),labelsPrimary(indxHF1,indxHF2)];
+                    labelsSecondary = [labelsSecondary(indxLR1,indxLR2),labelsSecondary(indxAP1,indxAP2),labelsSecondary(indxHF1,indxHF2)];
 
-                % Assign the labels
-                obj.leftLabel   = labelsPrimary(1);
-                obj.rightLabel  = labelsSecondary(1);
-                obj.topLabel    = labelsPrimary(2);
-                obj.bottomLabel = labelsSecondary(2);
-                obj.frontLabel  = labelsPrimary(3);
-                obj.backLabel   = labelsSecondary(3);
+                    % Which dimensions are displayed
+                    ov1 = app.imageOrient(app.OrientationSpinner.Value,1);
+                    ov2 = app.imageOrient(app.OrientationSpinner.Value,2);
+
+                    % Assign the labels
+                    obj.rightLabel   = labelsPrimary(ov1);
+                    obj.leftLabel  = labelsSecondary(ov1);
+                    obj.topLabel    = labelsPrimary(ov2);
+                    obj.bottomLabel = labelsSecondary(ov2);
+
+                end
 
             catch ME
 
                 app.TextMessage(ME.message);
 
-                obj.leftLabel   = ' ';
-                obj.rightLabel  = ' ';
-                obj.topLabel    = ' ';
-                obj.bottomLabel = ' ';
-                obj.frontLabel  = ' ';
-                obj.backLabel   = ' ';
-
             end
 
         end % imageOrient
-
 
 
 

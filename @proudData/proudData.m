@@ -51,7 +51,8 @@ classdef proudData
         NO_SLICES = 1                                       % number of slices
         NO_ECHOES = 1                                       % number of echoes
         nav_on = 0                                          % navigator on (1) / off (0)
-        VIEWS_PER_SEGMENT = 1                               % views per segment / interleaved scanning
+        VIEWS_PER_SEGMENT = 0                               % views per segment / interleaved scanning
+        lines_per_segment = 1                               % lines per segment
         SLICE_THICKNESS = 1                                 % slice thickness (mm)
         SLICE_SEPARATION = 1                                % slice separation (mm)
         SLICE_INTERLEAVE = 1                                % slice interleave type
@@ -125,6 +126,7 @@ classdef proudData
         multiFlipAngles_flag = false                        % multiple flip angles true/false
         multiCoil_flag = false                              % multiple receiver coils true/false
         multiSlab_flag = false                              % multiple 3D slabs true/false
+        segmentedData_flag = false                          % segmented data acquisition true/false
         validTrajectory_flag = false                        % valid k-space trajectory true/false
         rprFile_flag = false                                % RPR file data available true/false
         proudRecoScan_flag = false                          % MRD data from P2ROUD app true/false
@@ -180,6 +182,7 @@ classdef proudData
     % obj = permute2Dkspace(obj)
     % obj = sortScanner2DKspaceMRD(obj, app, kTable)
     % obj = sortScanner3DKspaceMRD(obj, app, kTable)
+    % obj = sort2DsegmKspaceMRD(obj, app)
     % obj = sort2DKspaceMRD(obj, app)
     % obj = sort3DKspaceMRD(obj, app)
     % obj = sortProudKspaceMRD(obj, app)
@@ -480,6 +483,10 @@ classdef proudData
                 obj.VIEWS_PER_SEGMENT = parameters.VIEWS_PER_SEGMENT;
             end
 
+            if isfield(parameters,'lines_per_segment')
+                obj.lines_per_segment = parameters.lines_per_segment;
+            end
+            
             if isfield(parameters,'date')
                 obj.date = parameters.date;
             end
@@ -1268,8 +1275,9 @@ classdef proudData
                 obj.multiSlab_flag = false;
                 if obj.NO_SLICES > 1
                     % Multiple slabs which need to be stitched together
-                    app.TextMessage('Multi-slab data ...');
+                    app.TextMessage('Multi-slab data detected ...');
                     obj.multiSlab_flag = true;
+                    app.SlabOverlapEditField.Value = 1;
                 end
             elseif obj.NO_VIEWS == 1 && obj.NO_VIEWS_2 == 1 && obj.EXPERIMENT_ARRAY > 1000
                 % 3D UTE data
@@ -1279,6 +1287,9 @@ classdef proudData
                 % Regular 2D multi-slice data
                 obj.dataType = "2D";
                 app.TextMessage('2D data detected ...');
+                if obj.lines_per_segment > 1
+                    obj.segmentedData_flag = true;
+                end
             end
 
             % Check for radial data acquisition
@@ -1512,16 +1523,16 @@ classdef proudData
                 % Coil data
                 kSpaceRaw = obj.rawKspace{coil};
 
-                % Dimensions
-                [dimx,dimy,dimz,nrrep,nrfa,nrte] = size(kSpaceRaw);
-                kSpace = zeros(size(kSpaceRaw));
-                trajectory2D = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
-
                 % Navigator yes or no, for RARE echo train correction
                 firsty = 0;
                 if obj.nav_on == 1
                     firsty = obj.VIEWS_PER_SEGMENT;
                 end
+
+                % Dimensions
+                [dimx,dimy,dimz,nrrep,nrfa,nrte] = size(kSpaceRaw);
+                kSpace = zeros(size(kSpaceRaw));
+                trajectory2D = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
 
                 % Counter
                 tcnt = 1;
@@ -1554,7 +1565,7 @@ classdef proudData
                                         idx = mod(j-firsty+1,firsty)+1;
                                         y = kTable(j)+round(firsty/2);
                                    
-                                        kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter).*exp(-1i*PHshift(idx));
+                                        kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);%.*exp(-1i*PHshift(idx));
 
                                         for x = 1:dimx
 
@@ -1693,6 +1704,121 @@ classdef proudData
             obj.validTrajectory_flag = true;
 
         end % sortScanner3DKspaceMRD
+
+
+
+
+        
+        % ---------------------------------------------------------------------------------
+        % Sort 2D segmented k-space data
+        % ---------------------------------------------------------------------------------
+        function obj = sort2DsegmKspaceMRD(obj, app)
+
+            app.TextMessage('Segmented k-space data ...');
+
+            % Acquisition (scan) order:
+            %
+            % N = lines_per_segment
+            %
+            % Segment 1, echo 1 (views: 1...N);
+            % Segment 1, echo 2 (views: 1...N);
+            % Segment 1, echo last (views: 1...N);
+            %
+            % Segment 2, echo 1 (views: N+1...2N);
+            % Segment 2, echo 1 (views: 2N+1...3N);
+            % Segment 2, echo last (views: no_views-N+1...no_views);
+            %
+            %
+            % Conventional MRD file order (it does not know about segments):
+            %
+            % Echo 1, View 1
+            % Echo 1, View 2
+            % Echo 1, View no_views
+            %
+            % Echo 2, View 1
+            % Echo 2, View 2
+            % Echo 2, View no_views
+            %  
+
+            % Dimensions
+%            [dimx, dimy, dimz, nfa, nr, ne] = size(obj.rawKspace{1});
+%             lps = obj.lines_per_segment;    % lines per segment
+%             nrs = dimy/lps;                 % number of segments
+                
+%            disp(size(obj.unsKspace{1}))
+ %           disp(size(obj.unsKspace{2}))
+
+%             p1 = perms([128,16,8,50]);
+%             p2 = perms([1,2,3,4]);
+% 
+%   figure(1)
+% 
+%             for kk = 1:length(p1)
+% 
+%                 for ll = 1:length(p2)
+% 
+%                
+%                     aa = obj.unsKspace{1};
+%                     aa = reshape(aa,p1(kk,:));
+%                     aa = permute(aa,p2(ll,:));
+%                     aa = reshape(aa,[dimx,ne,dimy]);
+% 
+%                   
+%                     imshow(abs(squeeze(aa(:,1,:))),[0 5],'InitialMagnification',400);
+%                     disp(kk)
+%                     disp(ll)
+%                     pause(0.25)
+%                    
+%                   
+%                     if isequal(aa(:),obj.unsKspace{2}(:))
+%                         break;
+%                     end
+% 
+%                 end
+% 
+%                 if isequal(aa(:),obj.unsKspace{2}(:))
+%                     break;
+%                 end
+% 
+%             end
+% 
+%             disp('-----')
+%             disp(p1(kk,:))
+%             disp(p2(ll,:))
+% 
+% 
+
+
+
+%             for i = 1:obj.nrCoils
+%      
+%                 cnt = 1;
+%                 for a = 1:nrs
+%                     for b = 1:ne
+%                         for c = 1:lps
+%                             for d = 1:dimx
+%                                 newKspace{i}(d,(a-1)*lps+c,b) = 1;
+%                                 cnt = cnt + 1;
+%                             end
+%                         end
+%                     end
+%                 end
+
+ %               disp(size(newKspace{i}))
+               
+
+  %             newKspace{i} = reshape(newKspace{i}(:),[dimx, dimy, dimz, nfa, nr, ne]);
+
+%             figure(1)
+%             imshow(abs(squeeze(newKspace{i}(:,:,1,1,1,2))),[0 5]);
+
+%            end
+
+            % Return the k-space object
+       %     obj.rawKspace = newKspace;
+
+        end % sort2DsegmKspaceMRD
+
 
 
 
@@ -2176,7 +2302,7 @@ classdef proudData
             % 	SLICE_DIM,      14  slices
             % 	AVG_DIM,        15
 
-            %                             1  2  3  4  5  6  7  8  9  10 11 12 13 14
+            %                            1  2  3  4  5  6  7  8  9  10 11 12 13 14
             kSpacePics = permute(kSpace,[7 ,2 ,1 ,8 ,9 ,6 ,5 ,10,11,12,4 ,13,14,3 ]);
 
             % wavelet in y and x spatial dimensions 2^1 + 2^2 = 6
@@ -2990,31 +3116,68 @@ classdef proudData
 
                 end
 
-                % Discard slab overlap
+                % Combine slabs with overlap if present
                 if dims>1
-                    nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
-                    if nrDiscard>0
-                        imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                        imageSlab(:,:,1:nrDiscard,:,:) = [];
-                        phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                        phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
-                    end
-                end
 
-                % Concatenate multislab data
-                imageMultiSlab = imageSlab(:,:,:,:,1);
-                phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
-                if dims>1
-                    for i = 2:dims
-                        imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
-                        phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
+                    nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
+
+                    overlap = app.SlabOverlapEditField.Value;
+                    if overlap > nrDiscard
+                        overlap = nrDiscard;
+                        app.SlabOverlapEditField.Value = overlap;
+                        app.TextMessage(sprintf('WARNING: Max slab overlap = %d pixels ...',overlap));
                     end
+                    nrDiscard = nrDiscard - overlap;
+
+                    imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
+                    imageSlab(:,:,1:nrDiscard,:,:) = [];
+                    phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
+                    phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
+                    avgSlab = ones(size(imageSlab));
+
+                    % Resulting image size + 2 * overlap on the image borders
+                    dimzs = size(imageSlab,3);
+                    totaldimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
+
+                    imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                    phaseImageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                    avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+
+                    % Concatenate the overlapping matrices
+                    z1 = 1;
+                    for i = 1:dims
+
+                        z2 = z1 + dimzs;
+
+                        imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
+                        phaseImageMultiSlab(:,:,z1:z2-1,:) = phaseImageMultiSlab(:,:,z1:z2-1,:) + phaseImageSlab(:,:,:,:,i);
+                        avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
+
+                        z1 = z2 - 2*overlap;
+
+                    end
+
+                    % Average the overlap
+                    imageMultiSlab = imageMultiSlab./avgMultiSlab;
+
+                    % Remove the overlap on the multi-slab beginning and end
+                    imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
+                    phaseImageMultiSlabOutput = phaseImageMultiSlab(:,:,overlap+1:end-overlap,:);
+
+
+                else
+
+                    % Only 1 image slab
+                    imageMultiSlabOutput = imageSlab(:,:,:,:,1);
+                    phaseImageMultiSlabOutput = phaseImageSlab(:,:,:,:,1);
+
                 end
 
                 % Return the image object
-                obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlab;
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
+                obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
+                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
+                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
+
             end
 
         end % csReco3D
@@ -3146,31 +3309,67 @@ classdef proudData
                 phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
             end
 
-            % Discard slab overlap
+            % Combine slabs with overlap if present
             if dims>1
-                nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
-                if nrDiscard>0
-                    imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                    imageSlab(:,:,1:nrDiscard,:,:) = [];
-                    phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                    phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
-                end
-            end
 
-            % Concatenate multislab data
-            imageMultiSlab = imageSlab(:,:,:,:,1);
-            phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
-            if dims>1
-                for i = 2:dims
-                    imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
-                    phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
+                nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
+                
+                overlap = app.SlabOverlapEditField.Value;
+                if overlap > nrDiscard
+                    overlap = nrDiscard;
+                    app.SlabOverlapEditField.Value = overlap;
+                    app.TextMessage(sprintf('WARNING: Max slab overlap = %d pixels ...',overlap));
                 end
+                nrDiscard = nrDiscard - overlap;
+
+                imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
+                imageSlab(:,:,1:nrDiscard,:,:) = [];
+                phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
+                phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
+                avgSlab = ones(size(imageSlab));
+                
+                % Resulting image size + 2 * overlap on the image borders
+                dimzs = size(imageSlab,3);
+                totaldimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
+
+                imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                phaseImageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+    
+                % Concatenate the overlapping matrices
+                z1 = 1;
+                for i = 1:dims
+                    
+                    z2 = z1 + dimzs;
+                    
+                    imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
+                    phaseImageMultiSlab(:,:,z1:z2-1,:) = phaseImageMultiSlab(:,:,z1:z2-1,:) + phaseImageSlab(:,:,:,:,i);
+                    avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
+
+                    z1 = z2 - 2*overlap;
+
+                end
+
+                % Average the overlap
+                imageMultiSlab = imageMultiSlab./avgMultiSlab;
+
+                % Remove the overlap on the multi-slab beginning and end
+                imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
+                phaseImageMultiSlabOutput = phaseImageMultiSlab(:,:,overlap+1:end-overlap,:);
+
+
+            else
+
+                % Only 1 image slab
+                imageMultiSlabOutput = imageSlab(:,:,:,:,1);
+                phaseImageMultiSlabOutput = phaseImageSlab(:,:,:,:,1);
+            
             end
 
             % Return the image object
-            obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlab;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
+            obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
 
         end % fftReco3D
 
@@ -3785,11 +3984,11 @@ classdef proudData
             dims = length(obj.gradTrajectory);
             traj = zeros(3,dims,dimy,dimd);
             for i=1:dimc
-                for d = 1:dimd
+                for g = 1:dimd
                     for cnt = 1:dimy
-                        traj(1,:,cnt,d,i) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
-                        traj(2,:,cnt,d,i) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
-                        traj(3,:,cnt,d,i) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+                        traj(1,:,cnt,g,i) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                        traj(2,:,cnt,g,i) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                        traj(3,:,cnt,g,i) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
                     end
                 end
             end
@@ -4775,7 +4974,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Read MRD file
         % ---------------------------------------------------------------------------------
-        function [im,dim,par,unsortedkspace] = importMRD(filename, reordering1, reordering2)
+        function [im,dim,par,unsortedKspace] = importMRD(filename, reordering1, reordering2)
 
             % Description: Function to open multidimensional MRD/SUR files given a filename with PPR-parsing
             % Read in MRD and SUR file formats
@@ -4797,11 +4996,11 @@ classdef proudData
             zdim = val(3);
             dim4 = val(4);
             fseek(fid,18,'bof');
-            datatype=fread(fid,1, 'uint16');
-            datatype = dec2hex(datatype);
+            dataType = fread(fid,1, 'uint16');
+            dataType = dec2hex(dataType);
             fseek(fid,48,'bof');
             scaling = fread(fid,1, 'float32');
-            bitsperpixel = fread(fid,1, 'uchar');
+            bitsPerPixel = fread(fid,1, 'uchar');
             fseek(fid,152,'bof');
             val = fread(fid,2, 'int32');
             dim5 = val(1);
@@ -4818,51 +5017,77 @@ classdef proudData
             % Read in the complex image data
             dim = [no_expts,no_echoes,no_slices,no_views_2,no_views,no_samples];
 
-            if size(datatype,2)>1
-                onlydatatype = datatype(2);
-                iscomplex = 2;
+            if size(dataType,2)>1
+                onlyDataType = dataType(2);
+                isComplex = 2;
             else
-                onlydatatype = datatype(1);
-                iscomplex = 1;
+                onlyDataType = dataType(1);
+                isComplex = 1;
             end
-            switch onlydatatype
+            switch onlyDataType
                 case '0'
-                    dataformat = 'uchar';   
+                    dataFormat = 'uchar';   
                 case '1'
-                    dataformat = 'schar';   
+                    dataFormat = 'schar';   
                 case '2'
-                    dataformat = 'short';   
+                    dataFormat = 'short';   
                 case '3'
-                    dataformat = 'int16';   
+                    dataFormat = 'int16';   
                 case '4'
-                    dataformat = 'int32';   
+                    dataFormat = 'int32';   
                 case '5'
-                    dataformat = 'float32'; 
+                    dataFormat = 'float32'; 
                 case '6'
-                    dataformat = 'double';  
+                    dataFormat = 'double';  
                 otherwise
-                    dataformat = 'int32';   
+                    dataFormat = 'int32';   
             end
 
-            num2read = no_expts*no_echoes*no_slices*no_views_2*no_views*no_samples*iscomplex; %*datasize;
-            [m_total, count] = fread(fid,num2read,dataformat); % reading all the data at once
+            % Try to read the expected amount of data at once
+            num2Read = no_expts*no_echoes*no_slices*no_views_2*no_views*no_samples*isComplex;
+            [m_total, count] = fread(fid,num2Read,dataFormat);
+        
+            % Check if expected size of data was read
+            % If not, this means that the acquisition was prematurely stopped
+            % and only part of the data is available
+            if count < num2Read
+    
+                % Find the end of the data by looking for :PPL string
+                textData = fileread(filename);
+                targetText = ":PPL";
+                amountOfData = strfind(textData,targetText);
 
-            if iscomplex == 2
-                a=1:count/2;
+                % Number of floats to read
+                newNum2Read = (amountOfData-4)/4 - 512;    
+
+                % Reset the file position indicator to beginning of the data
+                fseek(fid,512,'bof');
+
+                % Read the data again
+                [m_total, count] = fread(fid,newNum2Read ,dataFormat);
+        
+            end
+
+            if isComplex == 2
+                a=1:floor(count/2);
                 m_real = m_total(2*a-1);
                 m_imag = m_total(2*a);
                 clear m_total;
-                m_C = m_real+m_imag*1i;
+                m_C_tmp = m_real+m_imag*1i;
                 clear m_real m_imag;
             else
-                m_C = m_total;
+                m_C_tmp = m_total;
                 clear m_total;
             end
 
-            unsortedkspace = m_C;
+            % Pre-allocate the expected size of m_C, in case of missing data
+            m_C = zeros(num2Read,1);
+            m_C(1:length(m_C_tmp)) = m_C_tmp;
 
-            n=0;
-            % shaping the data manually:
+            % The unsorted k-space
+            unsortedKspace = m_C;
+            
+            % Shaping the data manually:
             ord=1:no_views;
             if strcmp(reordering1,'cen')
                 for g=1:no_views/2
@@ -4883,6 +5108,7 @@ classdef proudData
             % pre-allocate the data matrix
             m_C_1=zeros(no_expts,no_echoes,no_slices,max(ord(:)),max(ord2(:)),no_samples);
            
+            n=0;
             for a=1:no_expts
                 for b=1:no_echoes
                     for c=1:no_slices
@@ -4909,16 +5135,16 @@ classdef proudData
             % Parse fields in ppr section of the MRD file
             if numel(ppr_text)>0
                 cell_text = textscan(ppr_text,'%s','delimiter',char(13));
-                PPR_keywords = {'BUFFER_SIZE','DATA_TYPE','DECOUPLE_FREQUENCY','DISCARD','DSP_ROUTINE','EDITTEXT','EXPERIMENT_ARRAY','FOV','FOV_READ_OFF','FOV_PHASE_OFF','FOV_SLICE_OFF','GRADIENT_STRENGTH','MULTI_ORIENTATION','Multiple Receivers','NO_AVERAGES','NO_ECHOES','NO_RECEIVERS','NO_SAMPLES','NO_SLICES','NO_VIEWS','NO_VIEWS_2','OBLIQUE_ORIENTATION','OBSERVE_FREQUENCY','ORIENTATION','PHASE_CYCLE','READ/PHASE/SLICE_SELECTION','RECEIVER_FILTER','SAMPLE_PERIOD','SAMPLE_PERIOD_2','SCROLLBAR','SLICE_BLOCK','SLICE_FOV','SLICE_INTERLEAVE','SLICE_THICKNESS','SLICE_SEPARATION','SPECTRAL_WIDTH','SWEEP_WIDTH','SWEEP_WIDTH_2','VAR_ARRAY','VIEW_BLOCK','VIEWS_PER_SEGMENT','SMX','SMY','SWX','SWY','SMZ','SWZ','VAR','PHASE_ORIENTATION','X_ANGLE','Y_ANGLE','Z_ANGLE','PPL','IM_ORIENTATION','IM_OFFSETS'};
-                %PPR_type_0 keywords have text fields only, e.g. ":PPL C:\ppl\smisim\1ge_tagging2_1.PPL"
+                PPR_keywords = {'BUFFER_SIZE','DATA_TYPE','DECOUPLE_FREQUENCY','DISCARD','DSP_ROUTINE','EDITTEXT','EXPERIMENT_ARRAY','FOV','FOV_READ_OFF','FOV_PHASE_OFF','FOV_SLICE_OFF','GRADIENT_STRENGTH','MULTI_ORIENTATION','Multiple Receivers','NO_AVERAGES','NO_ECHOES','NO_RECEIVERS','NO_SAMPLES','NO_SLICES','NO_VIEWS','NO_VIEWS_2','OBLIQUE_ORIENTATION','OBSERVE_FREQUENCY','ORIENTATION','PHASE_CYCLE','READ/PHASE/SLICE_SELECTION','RECEIVER_FILTER','SAMPLE_PERIOD','SAMPLE_PERIOD_2','SCROLLBAR','SLICE_BLOCK','SLICE_FOV','SLICE_INTERLEAVE','SLICE_THICKNESS','SLICE_SEPARATION','SPECTRAL_WIDTH','SWEEP_WIDTH','SWEEP_WIDTH_2','VAR_ARRAY','VIEW_BLOCK','VIEWS_PER_SEGMENT','SMX','SMY','SWX','SWY','SMZ','SWZ','VAR','PHASE_ORIENTATION','X_ANGLE','Y_ANGLE','Z_ANGLE','PPL','IM_ORIENTATION','IM_OFFSETS','lines_per_segment'};
+                % PPR_type_0 keywords have text fields only, e.g. ":PPL C:\ppl\smisim\1ge_tagging2_1.PPL"
                 PPR_type_0 = [23 53];
-                %PPR_type_1 keywords have single value, e.g. ":FOV 300"
+                % PPR_type_1 keywords have single value, e.g. ":FOV 300"
                 PPR_type_1 = [8 42:47];
-                %PPR_type_2 keywords have single variable and single value, e.g. ":NO_SAMPLES no_samples, 16"
-                PPR_type_2 = [4 7  15:21 25 31 33 41 49];
+                % PPR_type_2 keywords have single variable and single value, e.g. ":NO_SAMPLES no_samples, 16"
+                PPR_type_2 = [4 7  15:21 25 31 33 41 49 50];
                 PPR_type_3 = 48; % VAR keyword only (syntax same as above)
                 PPR_type_4 = [28 29]; % :SAMPLE_PERIOD sample_period, 300, 19, "33.3 KHz  30 ?s" and SAMPLE_PERIOD_2 - read the first number=timeincrement in 100ns
-                %PPR_type_5 keywords have single variable and two values, e.g. ":SLICE_THICKNESS gs_var, -799, 100"
+                % PPR_type_5 keywords have single variable and two values, e.g. ":SLICE_THICKNESS gs_var, -799, 100"
                 PPR_type_5 = [34 35];
                 % KEYWORD [pre-prompt,] [post-prompt,] [min,] [max,] default, variable [,scale] [,further parameters ...];
                 PPR_type_6 = [39 9:11 50:52]; % VAR_ARRAY and angles keywords
@@ -4932,7 +5158,7 @@ classdef proudData
                         C = textscan(char1, '%*c%s %s', 1);
                         field_ = char(C{1});
                     end
-                    % find matching number in PPR_keyword array:
+                    % Find matching number in PPR_keyword array:
                     num = find(strcmp(field_,PPR_keywords));
                     if num>0
                         if find(PPR_type_3==num) % :VAR keyword
@@ -4996,7 +5222,7 @@ classdef proudData
                 else
                     par.Nucleus = 'Unspecified';
                 end
-                par.datatype = datatype;
+                par.datatype = dataType;
                 file_pars = dir(filename);
                 par.date = file_pars.date;
             else

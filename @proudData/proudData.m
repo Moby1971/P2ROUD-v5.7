@@ -2315,8 +2315,7 @@ classdef proudData
                 TextMessage(app,'ESPIRiT reconstruction ...');
 
                 % Calculate coil sensitivity maps with ecalib bart function
-                kSpacePicsSum = sum(kSpacePics,[11,12]);
-                sensitivities = bart(app,'ecalib -S -I -a', kSpacePicsSum);      % ecalib with softsense
+                sensitivities = bart(app,'ecalib -S -I -a', kSpacePics);      % ecalib with softsense
 
             end
 
@@ -2350,7 +2349,7 @@ classdef proudData
             imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
             % Sum of squares reconstruction
-            imageReg = abs(bart(app,'rss 16', imageTmp));
+            imageTmp = abs(bart(app,'rss 24', imageTmp));
 
             % Phase images
             phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
@@ -2450,8 +2449,7 @@ classdef proudData
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
                     % Calculate coil sensitivity maps with ecalib bart function
-                    kSpacePicsSum = sum(kSpacePics,[11,12]);
-                    sensitivities = bart(app,'ecalib -S -I -a', kSpacePicsSum);      % ecalib with softsense
+                    sensitivities = bart(app,'ecalib -S -I -m2', kSpacePics);      % ecalib with softsense
 
                 end
 
@@ -2485,7 +2483,7 @@ classdef proudData
                 imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
                 % Sum of squares reconstruction
-                imageReg = abs(bart(app,'rss 16', imageTmp));
+                imageTmp = abs(bart(app,'rss 24', imageTmp));
 
                 % Modulus image
                 imageReg = abs(imageTmp);
@@ -2873,8 +2871,7 @@ classdef proudData
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
                     % ESPIRiT sensitivity maps
-                    kSpacePicsSum = sum(kSpacePics,11);
-                    sensitivities = bart(app,'ecalib -I -S -a', kSpacePicsSum);
+                    sensitivities = bart(app,'ecalib -I -S -m2', kSpacePics);
 
                 end
 
@@ -2908,7 +2905,7 @@ classdef proudData
                 imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
                 % Sum of squares
-                imagesReg = abs(bart(app,'rss 16', imagesTmp));
+                imagesTmp = abs(bart(app,'rss 24', imagesTmp));
 
                 % Modulus and phase image
                 imagesReg = abs(imagesTmp);

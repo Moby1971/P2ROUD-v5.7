@@ -43,6 +43,8 @@ classdef proudData
         NO_VIEWS_ORIG = 1                                   % original number of views1 (phase encoding 2)
         NO_VIEWS_2 = 1                                      % number of views2 (phase encoding 2)
         NO_VIEWS_2_ORIG = 1                                 % original number of views2 (phase encoding 2)
+        no_switches = 1                                     % number of switches
+        no_pts_switch = 1                                   % number of pts switches
         DISCARD = 0                                         % number of discarded readout points
         EXPERIMENT_ARRAY = 1                                % number of experiments/repetitions
         oversample = 0                                      % oversample factor in readout direction
@@ -322,6 +324,11 @@ classdef proudData
             end
 
             if isfield(parameters,'NO_SAMPLES')
+                if isfield(parameters,'PPL')
+                   if contains(parameters.PPL,"epi")
+                        parameters.NO_SAMPLES = parameters.NO_SAMPLES/parameters.no_switches;
+                   end
+                end
                 obj.NO_SAMPLES = parameters.NO_SAMPLES;
                 obj.NO_SAMPLES_ORIG = parameters.NO_SAMPLES;
             else
@@ -335,6 +342,11 @@ classdef proudData
             end
 
             if isfield(parameters,'NO_VIEWS')
+                if isfield(parameters,'PPL')
+                   if contains(parameters.PPL,"epi")
+                        parameters.NO_VIEWS = parameters.no_switches;
+                   end
+                end
                 obj.NO_VIEWS = parameters.NO_VIEWS;
                 obj.NO_VIEWS_ORIG = parameters.NO_VIEWS;
             end
@@ -535,6 +547,14 @@ classdef proudData
 
             if isfield(parameters,'SAMPLE_PERIOD')
                 obj.SAMPLE_PERIOD = parameters.SAMPLE_PERIOD;
+            end
+
+            if isfield(parameters,'no_switches')
+                obj.no_switches = parameters.no_switches;
+            end
+
+            if isfield(parameters,'no_pts_switch')
+                obj.no_pts_switch = parameters.no_pts_switch;
             end
             
         end % readProudData
@@ -1327,6 +1347,12 @@ classdef proudData
                 end
             end
 
+            % EPI // under construction //
+            if contains(obj.PPL,"epi")
+                app.TextMessage('EPI data detected ...');
+                obj.dataType = "2Depi";
+            end
+
         end % setDataParameters
 
 
@@ -1503,7 +1529,14 @@ classdef proudData
                     end
                 end
             end
-           
+
+            % EPI // Under construction //
+            if obj.dataType == "2Depi"
+                for i = 1:obj.nrCoils
+                    obj.rawKspace{i} = reshape(obj.rawKspace{i},[obj.NO_SAMPLES,obj.NO_VIEWS,obj.NO_SLICES,obj.nr_repetitions]);
+                end
+            end
+
         end % permute2DKspace
 
 
@@ -1715,107 +1748,6 @@ classdef proudData
         function obj = sort2DsegmKspaceMRD(obj, app)
 
             app.TextMessage('Segmented k-space data ...');
-
-            % Acquisition (scan) order:
-            %
-            % N = lines_per_segment
-            %
-            % Segment 1, echo 1 (views: 1...N);
-            % Segment 1, echo 2 (views: 1...N);
-            % Segment 1, echo last (views: 1...N);
-            %
-            % Segment 2, echo 1 (views: N+1...2N);
-            % Segment 2, echo 1 (views: 2N+1...3N);
-            % Segment 2, echo last (views: no_views-N+1...no_views);
-            %
-            %
-            % Conventional MRD file order (it does not know about segments):
-            %
-            % Echo 1, View 1
-            % Echo 1, View 2
-            % Echo 1, View no_views
-            %
-            % Echo 2, View 1
-            % Echo 2, View 2
-            % Echo 2, View no_views
-            %  
-
-            % Dimensions
-%            [dimx, dimy, dimz, nfa, nr, ne] = size(obj.rawKspace{1});
-%             lps = obj.lines_per_segment;    % lines per segment
-%             nrs = dimy/lps;                 % number of segments
-                
-%            disp(size(obj.unsKspace{1}))
- %           disp(size(obj.unsKspace{2}))
-
-%             p1 = perms([128,16,8,50]);
-%             p2 = perms([1,2,3,4]);
-% 
-%   figure(1)
-% 
-%             for kk = 1:length(p1)
-% 
-%                 for ll = 1:length(p2)
-% 
-%                
-%                     aa = obj.unsKspace{1};
-%                     aa = reshape(aa,p1(kk,:));
-%                     aa = permute(aa,p2(ll,:));
-%                     aa = reshape(aa,[dimx,ne,dimy]);
-% 
-%                   
-%                     imshow(abs(squeeze(aa(:,1,:))),[0 5],'InitialMagnification',400);
-%                     disp(kk)
-%                     disp(ll)
-%                     pause(0.25)
-%                    
-%                   
-%                     if isequal(aa(:),obj.unsKspace{2}(:))
-%                         break;
-%                     end
-% 
-%                 end
-% 
-%                 if isequal(aa(:),obj.unsKspace{2}(:))
-%                     break;
-%                 end
-% 
-%             end
-% 
-%             disp('-----')
-%             disp(p1(kk,:))
-%             disp(p2(ll,:))
-% 
-% 
-
-
-
-%             for i = 1:obj.nrCoils
-%      
-%                 cnt = 1;
-%                 for a = 1:nrs
-%                     for b = 1:ne
-%                         for c = 1:lps
-%                             for d = 1:dimx
-%                                 newKspace{i}(d,(a-1)*lps+c,b) = 1;
-%                                 cnt = cnt + 1;
-%                             end
-%                         end
-%                     end
-%                 end
-
- %               disp(size(newKspace{i}))
-               
-
-  %             newKspace{i} = reshape(newKspace{i}(:),[dimx, dimy, dimz, nfa, nr, ne]);
-
-%             figure(1)
-%             imshow(abs(squeeze(newKspace{i}(:,:,1,1,1,2))),[0 5]);
-
-%            end
-
-            % Return the k-space object
-       %     obj.rawKspace = newKspace;
 
         end % sort2DsegmKspaceMRD
 
@@ -2197,7 +2129,7 @@ classdef proudData
 
             switch obj.dataType
 
-                case "2D"
+                case {"2D","2Depi"}
 
                     kSpaceSum = zeros(dimx,dimy);
                     for i=1:obj.nrCoils
@@ -4498,7 +4430,7 @@ classdef proudData
 
             switch obj.dataType
 
-                case {"2D","2Dradial"}
+                case {"2D","2Dradial","2Depi"}
 
                     % Images = (X, Y, slices, NR, NFA, NE)
                     [~, ~, slices, NR, NFA, NE] = size(im);

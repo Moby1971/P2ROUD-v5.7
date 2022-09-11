@@ -40,7 +40,7 @@ gifImages(gifImages < 0) = 0;
 gifImages(gifImages > 255) = 255;
 
 % Aspect ratio
-aspectRatio = (app.FOVViewField1.Value/app.FOVViewField2.Value)*(app.XEditField.Value/app.YEditField.Value);
+aspectRatio = (app.FOVViewField1.Value/app.FOVViewField2.Value); %*(app.XEditField.Value/app.YEditField.Value);
 if obj.PHASE_ORIENTATION
     aspectRatio = 1/aspectRatio;
 end

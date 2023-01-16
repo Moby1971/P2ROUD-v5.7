@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % August 2022
+    % January 2023
     %
 
     properties
@@ -1989,7 +1989,7 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Sort PROUD trajectory data
+        % Sort P2ROUD trajectory data
         % ---------------------------------------------------------------------------------
         function obj = sortProudKspaceMRD(obj, app)
 
@@ -1999,12 +1999,13 @@ classdef proudData
             obj.nsaSpace = [];
             obj.fillingSpace = [];
 
-            % Size of the image matrix
+            % Size of the image matrix (X, Y, Z, NR, NFA, NE)
             dimx = obj.NO_SAMPLES;
             dimy = obj.NO_VIEWS;
             dimz = obj.NO_VIEWS_2;
             nRep = obj.EXPERIMENT_ARRAY;
             frames = app.NREditField.Value;
+            nTE = app.NEViewField.Value;
 
             for coil = 1:obj.nrCoils
 
@@ -2016,16 +2017,16 @@ classdef proudData
                 % Preallocate memory for the matrices
                 aFrames = frames;
                 aFrames(aFrames==1)=2; % Allocate at least 2 frames, because preallocating 1 does not work
-                kSpace = zeros(dimx, dimy, dimz, aFrames);
-                avgSpace = zeros(dimx, dimy, dimz, aFrames);
+                kSpace = zeros(dimx, dimy, dimz, aFrames, 1, nTE);
+                avgSpace = zeros(dimx, dimy, dimz, aFrames, 1, nTE);
                 trajectoryProud = ones(dimx*dimy*dimz*nRep,7);
 
                 % Fill the ky and kz k-space locations
                 ky = zeros(length(obj.proudArray),1);
                 kz = zeros(length(obj.proudArray),1);
                 for i = 1:length(obj.proudArray)
-                    ky(i) = int8(obj.proudArray(1,i)) + round(dimy/2) + 1;     % contains the y-coordinates of the custom k-space sequentially
-                    kz(i) = int8(obj.proudArray(2,i)) + round(dimz/2) + 1;   % contains the z-coordinates of the custom k-space sequentially
+                    ky(i) = int8(obj.proudArray(1,i)) + round(dimy/2) + 1;      % contains the y-coordinates of the custom k-space sequentially
+                    kz(i) = int8(obj.proudArray(2,i)) + round(dimz/2) + 1;      % contains the z-coordinates of the custom k-space sequentially
                 end
 
                 % Duplicate for multiple acquired repetitions
@@ -2046,19 +2047,22 @@ classdef proudData
 
                     wstart = (t - 1) * klinesperframe + 1; % starting k-line for specific frame
                     wend = t * klinesperframe;             % ending k-line for specific frame
-                    if wend > dimy*dimz*nRep
-                        wend = dimy*dimz*nRep;
-                    end
-
+                    wnend(wend > dimy*dimz*nRep) = dimy*dimz*nRep;
+                    
                     % Loop over y- and z-dimensions (views and views2)
                     for w = wstart:wend
 
                         % Loop over x-dimension (readout)
                         for x = 1:dimx
 
-                            % Fill the k-space and signal averages matrix
-                            kSpace(x,ky(w),kz(w),t) = kSpace(x,ky(w),kz(w),t) + unsortedKspace((w-1)*dimx + x);
-                            avgSpace(x,ky(w),kz(w),t) = avgSpace(x,ky(w),kz(w),t) + 1;
+                            % Loop over echoes
+                            for echo = 1:nTE
+
+                                % Fill the k-space and signal averages matrix
+                                kSpace(x,ky(w),kz(w),t,1,echo) = kSpace(x,ky(w),kz(w),t,1,echo) + unsortedKspace((w-1)*dimx*nTE + (echo-1)*dimx + x);
+                                avgSpace(x,ky(w),kz(w),t,1,echo) = avgSpace(x,ky(w),kz(w),t,1,echo) + 1;
+
+                            end
 
                             % Fill the k-space trajectory array
                             cnt = cnt + 1;
@@ -2076,15 +2080,15 @@ classdef proudData
                 % Normalize by dividing through number of averages
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
-                obj.rawKspace{coil} = kSpace(:,:,:,1:frames);
+                obj.rawKspace{coil} = kSpace(:,:,:,1:frames,1,:);
 
             end
 
             % For k-space filling visualization
-            obj.nsaSpace = avgSpace(:,:,:,1:frames);
+            obj.nsaSpace = avgSpace(:,:,:,1:frames,1,:);
             fillingkSpace = avgSpace./avgSpace;
             fillingkSpace(isnan(fillingkSpace)) = 0;
-            obj.fillingSpace = fillingkSpace(:,:,:,1:frames);
+            obj.fillingSpace = fillingkSpace(:,:,:,1:frames,1,:);
 
             % Trajectory
             obj.seqTrajectory = trajectoryProud;
@@ -4975,7 +4979,7 @@ classdef proudData
             % Try to read the expected amount of data at once
             num2Read = no_expts*no_echoes*no_slices*no_views_2*no_views*no_samples*isComplex;
             [m_total, count] = fread(fid,num2Read,dataFormat);
-        
+
             % Check if expected size of data was read
             % If not, this means that the acquisition was prematurely stopped
             % and only part of the data is available
@@ -5010,12 +5014,12 @@ classdef proudData
             end
 
             % Pre-allocate the expected size of m_C, in case of missing data
-            m_C = zeros(num2Read,1);
+            m_C = zeros(num2Read/isComplex,1);
             m_C(1:length(m_C_tmp)) = m_C_tmp;
 
             % The unsorted k-space
             unsortedKspace = m_C;
-            
+
             % Shaping the data manually:
             ord=1:no_views;
             if strcmp(reordering1,'cen')

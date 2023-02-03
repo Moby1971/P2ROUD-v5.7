@@ -1915,7 +1915,7 @@ classdef proudData
                 ky = zeros(arrayLength,1);
                 kz = zeros(arrayLength,1);
                 for i = 1:arrayLength
-                    ky(i) = int16(parameters.gp_var_mul(cnt1)) + round(dimy/2) + 1;
+                    ky(i) = round(int16(parameters.gp_var_mul(cnt1)) + dimy/2 + 1);
                     kz(i) = kzp(cnt);
                     cnt = cnt + 1;
                     if cnt > dimz
@@ -1993,19 +1993,20 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = sortProudKspaceMRD(obj, app)
 
-            app.TextMessage('Sorting k-space ...');
+            app.TextMessage('Sorting P2ROUD k-space ...');
 
             obj.rawKspace = {};
             obj.nsaSpace = [];
             obj.fillingSpace = [];
 
-            % Size of the image matrix (X, Y, Z, NR, NFA, NE)
+            % Size of the image matrix (X, Y, Z, NR, NFA=1, NE)
             dimx = obj.NO_SAMPLES;
             dimy = obj.NO_VIEWS;
             dimz = obj.NO_VIEWS_2;
             nRep = obj.EXPERIMENT_ARRAY;
             frames = app.NREditField.Value;
             nTE = app.NEViewField.Value;
+            mtx = dimy*dimz*dimx;
 
             for coil = 1:obj.nrCoils
 
@@ -2015,64 +2016,73 @@ classdef proudData
                 unsortedKspace = obj.unsKspace{coil};
 
                 % Preallocate memory for the matrices
-                aFrames = frames;
-                aFrames(aFrames==1)=2; % Allocate at least 2 frames, because preallocating 1 does not work
-                kSpace = zeros(dimx, dimy, dimz, aFrames, 1, nTE);
-                avgSpace = zeros(dimx, dimy, dimz, aFrames, 1, nTE);
+                kSpace = zeros(dimx, dimy, dimz, frames, 1, nTE);
+                avgSpace = zeros(dimx, dimy, dimz, frames, 1, nTE);
                 trajectoryProud = ones(dimx*dimy*dimz*nRep,7);
 
                 % Fill the ky and kz k-space locations
-                ky = zeros(length(obj.proudArray),1);
-                kz = zeros(length(obj.proudArray),1);
-                for i = 1:length(obj.proudArray)
-                    ky(i) = int8(obj.proudArray(1,i)) + round(dimy/2) + 1;      % contains the y-coordinates of the custom k-space sequentially
-                    kz(i) = int8(obj.proudArray(2,i)) + round(dimz/2) + 1;      % contains the z-coordinates of the custom k-space sequentially
-                end
+                ky = round(obj.proudArray(1,:) + dimy/2 + 1);      % contains the y-coordinates of the custom k-space sequentially
+                kz = round(obj.proudArray(2,:) + dimz/2 + 1);      % contains the z-coordinates of the custom k-space sequentially
+                
+                % Some checks to keep k-space points within dimensions
+                ky(ky>dimy) = dimy;
+                ky(ky<1) = 1;
+                kz(kz>dimz) = dimz;
+                kz(kz<1) = 1;
 
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep+1);
-                kz = repmat(kz,1,nRep+1);
+                ky = repmat(ky,nRep);
+                kz = repmat(kz,nRep);
 
                 % Number of k-space points per frame
                 klinesperframe = round(dimy*dimz*nRep/frames);
                 app.TextMessage(strcat('k-lines per frame =',{' '},num2str(klinesperframe),' ...'));
 
                 % Trajectory counter
-                cnt = 0;
+                kcnt = 1;   % k-point counter
+                pcnt = 1;   % Phase counter
 
                 % Loop over desired number of frames
                 for t = 1:frames
 
                     app.TextMessage(strcat('Sorting dynamic',{' '},num2str(t),' ...'));
 
-                    wstart = (t - 1) * klinesperframe + 1; % starting k-line for specific frame
-                    wend = t * klinesperframe;             % ending k-line for specific frame
-                    wnend(wend > dimy*dimz*nRep) = dimy*dimz*nRep;
-                    
+                    wStart = (t - 1) * klinesperframe + 1; % Starting k-line for specific frame
+                    wEnd = t * klinesperframe;             % Ending k-line for specific frame
+                    wEnd(wEnd > dimy*dimz*nRep) = dimy*dimz*nRep;
+
                     % Loop over y- and z-dimensions (views and views2)
-                    for w = wstart:wend
+                    for w = wStart:wEnd
 
                         % Loop over x-dimension (readout)
-                        for x = 1:dimx
+                        for kx = 1:dimx
 
-                            % Loop over echoes
+                            % Loop over gradient-echoes
                             for echo = 1:nTE
 
                                 % Fill the k-space and signal averages matrix
-                                kSpace(x,ky(w),kz(w),t,1,echo) = kSpace(x,ky(w),kz(w),t,1,echo) + unsortedKspace((w-1)*dimx*nTE + (echo-1)*dimx + x);
-                                avgSpace(x,ky(w),kz(w),t,1,echo) = avgSpace(x,ky(w),kz(w),t,1,echo) + 1;
+                                if mod(echo,2)
+                                    kSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) + unsortedKspace((pcnt-1)*dimx + (echo-1)*mtx + kx);
+                                else
+                                    kSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) + unsortedKspace((pcnt-1)*dimx + (echo-1)*mtx + (dimx-kx+1)); % reverse even echoes
+                                end
+                            
+                                % Fill averages space
+                                avgSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),t,1,echo) + 1;
 
                             end
 
                             % Fill the k-space trajectory array
-                            cnt = cnt + 1;
-                            trajectoryProud(cnt,1) = x;
-                            trajectoryProud(cnt,2) = ky(w);
-                            trajectoryProud(cnt,3) = kz(w);
-                            trajectoryProud(cnt,4) = t;
+                            trajectoryProud(kcnt,1) = kx;
+                            trajectoryProud(kcnt,2) = ky(pcnt);
+                            trajectoryProud(kcnt,3) = kz(pcnt);
+                            trajectoryProud(kcnt,4) = t;
+                            kcnt = kcnt + 1;
 
                         end
 
+                        pcnt = pcnt + 1; % Phase counter
+                
                     end
 
                 end
@@ -2080,15 +2090,15 @@ classdef proudData
                 % Normalize by dividing through number of averages
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
-                obj.rawKspace{coil} = kSpace(:,:,:,1:frames,1,:);
+                obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
 
             end
 
             % For k-space filling visualization
-            obj.nsaSpace = avgSpace(:,:,:,1:frames,1,:);
+            obj.nsaSpace = avgSpace(:,:,:,:,1,:);
             fillingkSpace = avgSpace./avgSpace;
             fillingkSpace(isnan(fillingkSpace)) = 0;
-            obj.fillingSpace = fillingkSpace(:,:,:,1:frames,1,:);
+            obj.fillingSpace = fillingkSpace(:,:,:,:,1,:);
 
             % Trajectory
             obj.seqTrajectory = trajectoryProud;
@@ -2291,7 +2301,7 @@ classdef proudData
             phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
 
             % Rearrange to correct orientation: x, y, slices, dynamics, flip-angle, TE (cine)
-            imageReg = permute(imageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
+            imageReg = permute(imageTmp,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
             phaseImageReg = permute(phaseImageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
             % Flip dimensions where needed
@@ -5276,7 +5286,7 @@ classdef proudData
                                 eval(['struct.' lower(paramname(1:findstr(paramname,'_')-1)) '.' lower(paramname(findstr(paramname,'_')+1:length(paramname))) '= paramvalue;']);
                             catch
                                 eval(['struct.' lower(paramname(1:findstr(paramname,'_')-1)) '.' datestr(str2num(paramname(findstr(paramname,'_')+1:findstr(paramname,'_')+2)),9) ...
-                                    paramname(findstr(paramname,'_')+2:length(paramname)) '= paramvalue;']); %#ok<*FSTR>
+                                    paramname(findstr(paramname,'_')+2:length(paramname)) '= paramvalue;']); %#ok<*DATST,*FSTR>
                             end
                         end
 

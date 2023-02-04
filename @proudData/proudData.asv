@@ -1911,15 +1911,15 @@ classdef proudData
 
                 % Fill the ky-space locations
                 cnt1 = 1;
-                kcnt = 1;
+                cnt = 1;
                 ky = zeros(arrayLength,1);
                 kz = zeros(arrayLength,1);
                 for i = 1:arrayLength
                     ky(i) = round(int16(parameters.gp_var_mul(cnt1)) + dimy/2 + 1);
-                    kz(i) = kzp(kcnt);
-                    kcnt = kcnt + 1;
-                    if kcnt > dimz
-                        kcnt = 1;
+                    kz(i) = kzp(cnt);
+                    cnt = cnt + 1;
+                    if cnt > dimz
+                        cnt = 1;
                         cnt1 = cnt1 + 1;
                         cnt1(cnt1 > dimyOrig) = 1;
                     end
@@ -1928,15 +1928,13 @@ classdef proudData
                 % Duplicate for multiple acquired repetitions
                 ky = repmat(ky,1,nRep);
                 kz = repmat(kz,1,nRep);
-                ky = ky(:);
-                kz = kz(:);
 
                 % Number of k-space points per frame
                 kPointsPerFrame = round(dimyOrig * dimz * nRep / frames);
                 app.TextMessage(strcat('k-lines per dynamic =',{' '},num2str(kPointsPerFrame),' ...'));
 
                 % Trajectory counter
-                kcnt = 0;
+                cnt = 0;
 
                 % Loop over desired number of frames
                 for dynamic = 1:frames
@@ -1948,20 +1946,20 @@ classdef proudData
                     wEnd(wEnd > arrayLength*nRep) = arrayLength * nRep;
 
                     % Loop over y-dimension (views)
-                    for pcnt = wStart:wEnd
+                    for w = wStart:wEnd
 
                         % Loop over x-dimension (readout)
                         for x = 1:dimx
 
-                            kSpace(x,ky(pcnt),kz(pcnt),dynamic) = kSpace(x,ky(pcnt),kz(pcnt),dynamic) + unsortedKspace((pcnt - 1) * dimx + x);
-                            avgSpace(x,ky(pcnt),kz(pcnt),dynamic) = avgSpace(x,ky(pcnt),kz(pcnt),dynamic) + 1;
+                            kSpace(x,ky(w),kz(w),dynamic) = kSpace(x,ky(w),kz(w),dynamic) + unsortedKspace((w - 1) * dimx + x);
+                            avgSpace(x,ky(w),kz(w),dynamic) = avgSpace(x,ky(w),kz(w),dynamic) + 1;
 
                             % Fill the k-space trajectory array
-                            kcnt = kcnt + 1;
-                            trajectory3D(kcnt,1) = x;
-                            trajectory3D(kcnt,2) = ky(pcnt);
-                            trajectory3D(kcnt,3) = kz(pcnt);
-                            trajectory3D(kcnt,4) = dynamic;
+                            cnt = cnt + 1;
+                            trajectory3D(cnt,1) = x;
+                            trajectory3D(cnt,2) = ky(w);
+                            trajectory3D(cnt,3) = kz(w);
+                            trajectory3D(cnt,4) = dynamic;
 
                         end
 
@@ -1995,7 +1993,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = sortProudKspaceMRD(obj, app)
 
-            app.TextMessage('Sorting 3D P2ROUD k-space ...');
+            app.TextMessage('Sorting P2ROUD k-space ...');
 
             obj.rawKspace = {};
             obj.nsaSpace = [];
@@ -2017,8 +2015,15 @@ classdef proudData
                 % Unsorted k-space for each coil
                 unsortedKspace = obj.unsKspace{coil};
                 unsortedKspace = reshape(unsortedKspace,dimx,dimy,dimz,nTE,nRep);
-                unsortedKspace = permute(unsortedKspace,[1,4,2,3,5]);
+
+                disp(size(unsortedKspace))
+
+                unsortedKspace = permute(unsortedKspace,[1,4,5,2,3]);
+
+                disp(size(unsortedKspace))
+
                 unsortedKspace = unsortedKspace(:);
+
 
                 % Preallocate memory for the matrices
                 kSpace = zeros(dimx, dimy, dimz, nFrames, 1, nTE);
@@ -2035,11 +2040,20 @@ classdef proudData
                 kz(kz>dimz) = dimz;
                 kz(kz<1) = 1;
 
+disp('**')
+disp(size(ky))
+
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep);
-                kz = repmat(kz,1,nRep);
+                ky = repmat(ky,nRep,1);
+                kz = repmat(kz,nRep,1);
                 ky = ky(:);
                 kz = kz(:);
+
+                figure(1);
+                scatter(ky(1:4096),kz(1:4096))
+
+                disp('*')
+                disp(size(ky))
 
                 % Number of k-space points per frame
                 kLinesPerFrame = round(dimy*dimz*nRep/nFrames);
@@ -2056,6 +2070,10 @@ classdef proudData
                     wStart = (frame - 1) * kLinesPerFrame + 1;      % Starting k-line for specific frame
                     wEnd = frame * kLinesPerFrame;                  % Ending k-line for specific frame
                     wEnd(wEnd > dimy*dimz*nRep) = dimy*dimz*nRep;
+
+                    disp(wStart)
+                    disp(wEnd)
+
 
                     % Loop over y- and z-dimensions (views and views2)
                     for pcnt = wStart:wEnd
@@ -2075,7 +2093,6 @@ classdef proudData
 
                                 % Fill averages space
                                 avgSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) + 1;
-                            
                             end
 
                             % Fill the k-space trajectory array

@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % January 2023
+    % February 2023
     %
 
     properties
@@ -894,7 +894,7 @@ classdef proudData
                 if ~isempty(pos)
                     
                     % Determine which part should be replaced
-                    oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),char(13))-1;
+                    oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),newline)-1;
 
                     % Slice thickness is a special case
                     if contains(txt,'SLICE_THICKNESS')
@@ -1268,8 +1268,8 @@ classdef proudData
             % Write data at once
             fwrite(fid1,temp,'float32');
 
-            fwrite(fid1,char(13));
-
+            fwrite(fid1,newline);
+         
             % Write the footer
             fwrite(fid1,footer,'int8');
 
@@ -5076,8 +5076,13 @@ classdef proudData
             im=m_C;
             clear m_C;
             sample_filename = char(fread(fid,120,'uchar')');
+            fseek(fid,-120,'cof');
             ppr_text = char(fread(fid,Inf,'uchar')');
             fclose(fid);
+
+            % Locate the first entry = :PPL
+            pos1 = strfind(ppr_text,':PPL');
+            ppr_text = ppr_text(pos1(1):end);
 
             % Parse fields in ppr section of the MRD file
             if numel(ppr_text)>0
@@ -5128,7 +5133,7 @@ classdef proudData
                             par = setfield(par, field_, numeric_field);
                         elseif find(PPR_type_0==num)
                             C = textscan(char1, '%*s %[^\n]');
-                            text_field = char(C{1}); %text_field = reshape(text_field,1,[]);
+                            text_field = char(C{1}); 
                             par = setfield(par, field_, text_field);
                         elseif  find(PPR_type_5==num)
                             C = textscan(char1, '%*s %s %f %c %f');

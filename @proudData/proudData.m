@@ -2001,14 +2001,21 @@ classdef proudData
             obj.nsaSpace = [];
             obj.fillingSpace = [];
 
-            % Size of the image matrix (X, Y, Z, NR, NFA=1, NE)
+            % Size of the image matrix (X, Y, Z, NR, NFA, NE)
             dimx = obj.NO_SAMPLES;
             dimy = obj.NO_VIEWS;
             dimz = obj.NO_VIEWS_2;
             nRep = obj.EXPERIMENT_ARRAY;
             nFrames = app.NREditField.Value;
             nTE = app.NEViewField.Value;
+            nFA = app.NFAViewField.Value;
             mtx = dimy*dimz*dimx;
+
+            % For multiple flip-angles
+            if nFA > 1
+                nRep = nFA;
+                nFrames = nFA;
+            end
 
             for coil = 1:obj.nrCoils
 
@@ -2083,6 +2090,7 @@ classdef proudData
                             trajectoryProud(kcnt,2) = ky(pcnt);
                             trajectoryProud(kcnt,3) = kz(pcnt);
                             trajectoryProud(kcnt,4) = frame;
+                            trajectoryProud(kcnt,5) = frame;
                             kcnt = kcnt + 1;
 
                         end
@@ -2095,6 +2103,11 @@ classdef proudData
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
                 obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
+                
+                % For multiple flip-angles
+                if nFA>1 
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
+                end
 
             end
 
@@ -2103,6 +2116,12 @@ classdef proudData
             fillingkSpace = avgSpace./avgSpace;
             fillingkSpace(isnan(fillingkSpace)) = 0;
             obj.fillingSpace = fillingkSpace(:,:,:,:,1,:);
+
+            % For multiple flip-angles
+            if nFA>1
+                obj.nsaSpace = permute(obj.nsaSpace,[1 2 3 5 4 6]);
+                obj.fillingSpace = permute(obj.fillingSpace,[1 2 3 5 4 6]);
+            end
 
             % Trajectory
             obj.seqTrajectory = trajectoryProud;

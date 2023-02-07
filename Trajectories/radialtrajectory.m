@@ -18,11 +18,11 @@ close all force;
 
 outputdir = pwd;
 
-dimy = 84;
-dimz = 84;
+dimy = 128;
+dimz = 96;
 order = 1;   % 1 = back and forth, 2 = one direction
 angle_nr = 10;
-display = true;
+display = false;
 
 tiny_golden_angles = [111.24611, 68.75388, 49.75077, 38.97762, 32.03967, 27.19840, 23.62814, 20.88643, 18.71484, 16.95229];
 

@@ -902,6 +902,7 @@ classdef proudData
                         commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+8),',');
                         inputfooter = insertAfter(inputfooter,pos+length(txt)+commapos,'      ');
                         pos = pos+commapos;
+                        oldtxtlength = oldtxtlength + 1;
                     end
 
                     try
@@ -2015,6 +2016,7 @@ classdef proudData
             if nFA > 1
                 nRep = nFA;
                 nFrames = nFA;
+                app.NREditField.Value = 1;
             end
 
             for coil = 1:obj.nrCoils

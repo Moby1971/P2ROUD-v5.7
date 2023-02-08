@@ -2043,10 +2043,10 @@ classdef proudData
                 ky(ky<1) = 1;
                 kz(kz>dimz) = dimz;
                 kz(kz<1) = 1;
-
+               
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep);
-                kz = repmat(kz,1,nRep);
+                ky = repmat(ky,1,nRep+1);
+                kz = repmat(kz,1,nRep+1);
                 ky = ky(:);
                 kz = kz(:);
 

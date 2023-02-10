@@ -187,7 +187,7 @@ classdef proudData
     % obj = sort2DsegmKspaceMRD(obj, app)
     % obj = sort2DKspaceMRD(obj, app)
     % obj = sort3DKspaceMRD(obj, app)
-    % obj = sortProudKspaceMRD(obj, app)
+    % obj = sort3DProudKspaceMRD(obj, app)
     % obj = chopNav(obj)
     % obj = applyTukey(obj)
     % obj = csReco2DCine(obj,app,flipAngle)
@@ -197,6 +197,7 @@ classdef proudData
     % obj = fftReco3D(obj,app,flipAngle,echoTime)
     % obj = Reco2DRadialCS(obj,app,flipAngle,echoTime)
     % obj = Reco2DRadialNUFFT(obj,app,flipAngle,echoTime)
+    % obj = unRing(obj,app)
     % obj = scaleImages(obj)
     % obj = calcPixelSize(obj,app)
     % obj = backToKspace(obj)
@@ -323,11 +324,13 @@ classdef proudData
                 obj.PPL = strcat(name,ext);
             end
 
-            if isfield(parameters,'NO_SAMPLES')
+            if isfield(parameters,'NO_SAMPLES') && isfield(parameters,'NO_VIEWS')
                 if isfield(parameters,'PPL')
-                   if contains(parameters.PPL,"epi")
-                        parameters.NO_SAMPLES = parameters.NO_SAMPLES/parameters.no_switches;
-                   end
+                    if contains(parameters.PPL,"epi")
+                        if parameters.NO_VIEWS == 1
+                            parameters.NO_SAMPLES = parameters.NO_SAMPLES/parameters.no_switches;
+                        end
+                    end
                 end
                 obj.NO_SAMPLES = parameters.NO_SAMPLES;
                 obj.NO_SAMPLES_ORIG = parameters.NO_SAMPLES;
@@ -1350,7 +1353,7 @@ classdef proudData
 
             % EPI // under construction //
             if contains(obj.PPL,"epi")
-                app.TextMessage('EPI data detected ...');
+                app.TextMessage('EPI sequence detected ...');
                 obj.dataType = "2Depi";
             end
 
@@ -1878,25 +1881,34 @@ classdef proudData
             % Size of the image matrix (X, Y, Z, NR, NFA, NE)
             dimx = obj.NO_SAMPLES_ORIG;
             dimy = obj.NO_VIEWS;
-            dimz = obj.NO_VIEWS_2;
-            nRep = obj.EXPERIMENT_ARRAY;
-            arrayLength = obj.NO_VIEWS_ORIG*dimz;
             dimyOrig = obj.NO_VIEWS_ORIG;
-            frames = app.NREditField.Value;
+            dimz = obj.NO_VIEWS_2;
+            nRep = obj.EXPERIMENT_ARRAY;                % Number of acquired repetitions/dynamics
+            nDyn = app.NREditField.Value;               % Number of reconstructed dynamics
+            nFA = app.NFAViewField.Value;               % Number of flip angles
+            arrayLength = obj.NO_VIEWS_ORIG*dimz;
 
+            % For multiple flip-angles
+            if nFA > 1
+                nRep = nFA;
+                nDyn = nFA;
+                app.NREditField.Value = 1;
+            end
+        
             for coil = 1:obj.nrCoils
 
                 app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
 
                 % Unsorted k-space for each coil
                 unsortedKspace = obj.unsKspace{coil};
+                unsortedKspace = reshape(unsortedKspace,dimx,dimy,dimz,nTE,nRep);
+                unsortedKspace = permute(unsortedKspace,[1,4,2,3,5]);
+                unsortedKspace = unsortedKspace(:);
 
                 % Preallocate memory for the matrices
-                aFrames = frames;
-                aFrames(aFrames==1)=2;
-                kSpace = zeros(dimx, dimy, dimz, aFrames); % Allocate at least 2 frames, because preallocating 1 does not work
-                avgSpace = zeros(dimx, dimy, dimz, aFrames);
-                trajectory3D = ones(dimx*arrayLength*nRep,7);
+                kSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
+                avgSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
+                trajectory3D = ones(mtx*nRep,7);
 
                 % Centric or linear k-space ordering for views2
                 kzp = zeros(dimz,1);
@@ -1926,23 +1938,33 @@ classdef proudData
                     end
                 end
 
+                % Some checks to keep k-space points within dimensions
+                ky(ky>dimy) = dimy;
+                ky(ky<1) = 1;
+                kz(kz>dimz) = dimz;
+                kz(kz<1) = 1;
+
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep);
-                kz = repmat(kz,1,nRep);
+                ky = repmat(ky,1,nRep+1);
+                kz = repmat(kz,1,nRep+1);
                 ky = ky(:);
                 kz = kz(:);
 
                 % Number of k-space points per frame
-                kPointsPerFrame = round(dimyOrig * dimz * nRep / frames);
+                kPointsPerFrame = round(dimyOrig * dimz * nRep / nDyn);
                 app.TextMessage(strcat('k-lines per dynamic =',{' '},num2str(kPointsPerFrame),' ...'));
 
                 % Trajectory counter
-                kcnt = 0;
+                kcnt = 1;
 
                 % Loop over desired number of frames
-                for dynamic = 1:frames
+                for dynamic = 1:nDyn
 
-                    app.TextMessage(strcat('Sorting dynamic',{' '},num2str(dynamic),' ...'));
+                    if nFA>1
+                        app.TextMessage(strcat('Sorting flip-angle #',num2str(dynamic),' ...'));
+                    else
+                        app.TextMessage(strcat('Sorting dynamic #',num2str(dynamic),' ...'));
+                    end
 
                     wStart = (dynamic - 1) * kPointsPerFrame + 1; % starting k-line for specific frame
                     wEnd = dynamic * kPointsPerFrame;             % ending k-line for specific frame
@@ -1954,15 +1976,29 @@ classdef proudData
                         % Loop over x-dimension (readout)
                         for x = 1:dimx
 
-                            kSpace(x,ky(pcnt),kz(pcnt),dynamic) = kSpace(x,ky(pcnt),kz(pcnt),dynamic) + unsortedKspace((pcnt - 1) * dimx + x);
-                            avgSpace(x,ky(pcnt),kz(pcnt),dynamic) = avgSpace(x,ky(pcnt),kz(pcnt),dynamic) + 1;
+                            % Loop over gradient-echoes
+                            for echo = 1:nTE
+
+                                % Fill the k-space and signal averages matrix
+                                if mod(echo,2)
+                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + kx);
+                                else
+                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + (dimx-kx+1)); % reverse even echoes
+                                end
+
+                                % Fill averages space
+                                avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
+                            
+                            end
 
                             % Fill the k-space trajectory array
-                            kcnt = kcnt + 1;
                             trajectory3D(kcnt,1) = x;
                             trajectory3D(kcnt,2) = ky(pcnt);
                             trajectory3D(kcnt,3) = kz(pcnt);
                             trajectory3D(kcnt,4) = dynamic;
+                            trajectory3D(kcnt,4) = dynamic;
+                            trajectory3D(kcnt,5) = dynamic;
+                            kcnt = kcnt + 1;
 
                         end
 
@@ -1973,15 +2009,26 @@ classdef proudData
                 % Normalize by dividing through number of averages
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
-                obj.rawKspace{coil} = kSpace(:,:,:,1:frames);
+                obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
+
+                % For multiple flip-angles
+                if nFA>1 
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
+                end
 
             end
-
+            
             % For k-space filling visualization
-            obj.nsaSpace = avgSpace(:,:,:,1:frames);
-            fillSpace = avgSpace./avgSpace;
-            fillSpace(isnan(fillSpace)) = 0;
-            obj.fillingSpace = fillSpace(:,:,:,1:frames);
+            obj.nsaSpace = avgSpace(:,:,:,:,1,:);
+            fillkSpace = avgSpace./avgSpace;
+            fillkSpace(isnan(fillkSpace)) = 0;
+            obj.fillingSpace = fillkSpace(:,:,:,:,1,:);
+
+            % For multiple flip-angles
+            if nFA>1
+                obj.nsaSpace = permute(obj.nsaSpace,[1 2 3 5 4 6]);
+                obj.fillingSpace = permute(obj.fillingSpace,[1 2 3 5 4 6]);
+            end
 
             % Trajectory
             obj.seqTrajectory = trajectory3D;
@@ -1992,9 +2039,9 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Sort P2ROUD trajectory data
+        % Sort 3D P2ROUD k-space data
         % ---------------------------------------------------------------------------------
-        function obj = sortProudKspaceMRD(obj, app)
+        function obj = sort3DProudKspaceMRD(obj, app)
 
             app.TextMessage('Sorting 3D P2ROUD k-space ...');
 
@@ -2006,16 +2053,16 @@ classdef proudData
             dimx = obj.NO_SAMPLES;
             dimy = obj.NO_VIEWS;
             dimz = obj.NO_VIEWS_2;
-            nRep = obj.EXPERIMENT_ARRAY;
-            nFrames = app.NREditField.Value;
-            nTE = app.NEViewField.Value;
-            nFA = app.NFAViewField.Value;
+            nRep = obj.EXPERIMENT_ARRAY;        % Number of acquired dynamics
+            nDyn = app.NREditField.Value;       % Number of reconstructed dynamics
+            nTE = app.NEViewField.Value;        % Number of echo times
+            nFA = app.NFAViewField.Value;       % Number of flip angles
             mtx = dimy*dimz*dimx;
 
             % For multiple flip-angles
             if nFA > 1
                 nRep = nFA;
-                nFrames = nFA;
+                nDyn = nFA;
                 app.NREditField.Value = 1;
             end
 
@@ -2030,8 +2077,8 @@ classdef proudData
                 unsortedKspace = unsortedKspace(:);
 
                 % Preallocate memory for the matrices
-                kSpace = zeros(dimx, dimy, dimz, nFrames, 1, nTE);
-                avgSpace = zeros(dimx, dimy, dimz, nFrames, 1, nTE);
+                kSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
+                avgSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
                 trajectoryProud = ones(mtx*nRep,7);
 
                 % Fill the ky and kz k-space locations
@@ -2051,19 +2098,23 @@ classdef proudData
                 kz = kz(:);
 
                 % Number of k-space points per frame
-                kLinesPerFrame = round(dimy*dimz*nRep/nFrames);
+                kLinesPerFrame = round(dimy*dimz*nRep/nDyn);
                 app.TextMessage(strcat('k-lines per frame =',{' '},num2str(kLinesPerFrame),' ...'));
 
                 % Trajectory counter
                 kcnt = 1;   % k-point counter
       
                 % Loop over desired number of frames
-                for frame = 1:nFrames
+                for dynamic = 1:nDyn
 
-                    app.TextMessage(strcat('Sorting dynamic',{' '},num2str(frame),' ...'));
+                    if nFA>1
+                        app.TextMessage(strcat('Sorting flip-angle #',num2str(dynamic),' ...'));
+                    else
+                        app.TextMessage(strcat('Sorting dynamic #',num2str(dynamic),' ...'));
+                    end
 
-                    wStart = (frame - 1) * kLinesPerFrame + 1;      % Starting k-line for specific frame
-                    wEnd = frame * kLinesPerFrame;                  % Ending k-line for specific frame
+                    wStart = (dynamic - 1) * kLinesPerFrame + 1;      % Starting k-line for specific frame
+                    wEnd = dynamic * kLinesPerFrame;                  % Ending k-line for specific frame
                     wEnd(wEnd > dimy*dimz*nRep) = dimy*dimz*nRep;
 
                     % Loop over y- and z-dimensions (views and views2)
@@ -2077,13 +2128,13 @@ classdef proudData
 
                                 % Fill the k-space and signal averages matrix
                                 if mod(echo,2)
-                                    kSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + kx);
+                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + kx);
                                 else
-                                    kSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + (dimx-kx+1)); % reverse even echoes
+                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + (dimx-kx+1)); % reverse even echoes
                                 end
 
                                 % Fill averages space
-                                avgSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),frame,1,echo) + 1;
+                                avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
                             
                             end
 
@@ -2091,8 +2142,8 @@ classdef proudData
                             trajectoryProud(kcnt,1) = kx;
                             trajectoryProud(kcnt,2) = ky(pcnt);
                             trajectoryProud(kcnt,3) = kz(pcnt);
-                            trajectoryProud(kcnt,4) = frame;
-                            trajectoryProud(kcnt,5) = frame;
+                            trajectoryProud(kcnt,4) = dynamic;
+                            trajectoryProud(kcnt,5) = dynamic;
                             kcnt = kcnt + 1;
 
                         end
@@ -3210,41 +3261,41 @@ classdef proudData
 
                     % Zero-fill or crop x-dimension
                     if ndimx > dimx
-                        padsizex = round((ndimx - dimx)/2);
-                        kdatai = padarray(kData,[padsizex,0,0],'both');
+                        padSizex = round((ndimx - dimx)/2);
+                        kDatai = padarray(kData,[padSizex,0,0],'both');
                     else
-                        cropsize = round((dimx - ndimx)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kData(cropsize+1:end-cropsize,:,:,:);
+                        cropSize = round((dimx - ndimx)/2)-1;
+                        cropSize(cropSize<0)=0;
+                        kDatai = kData(cropSize+1:end-cropSize,:,:,:);
                     end
 
                     % Zero-fill or crop y-dimension
                     if ndimy > dimy
-                        padsizey = round((ndimy - dimy)/2);
-                        kdatai = padarray(kdatai,[0,padsizey,0],'both');
+                        padSizey = round((ndimy - dimy)/2);
+                        kDatai = padarray(kDatai,[0,padSizey,0],'both');
                     else
-                        cropsize = round((dimy - ndimy)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,cropsize+1:end-cropsize,:,:);
+                        cropSize = round((dimy - ndimy)/2)-1;
+                        cropSize(cropSize<0)=0;
+                        kDatai = kDatai(:,cropSize+1:end-cropSize,:,:);
                     end
 
                     % Zero-fill or crop z-dimension
                     if ndimz > dimz
-                        padsizez = round((ndimz - dimz)/2);
-                        kdatai = padarray(kdatai,[0,0,padsizez],'both');
+                        padSizez = round((ndimz - dimz)/2);
+                        kDatai = padarray(kDatai,[0,0,padSizez],'both');
                     else
-                        cropsize = round((dimz - ndimz)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,:,cropsize+1:end-cropsize,:);
+                        cropSize = round((dimz - ndimz)/2)-1;
+                        cropSize(cropSize<0)=0;
+                        kDatai = kDatai(:,:,cropSize+1:end-cropSize,:);
                     end
 
                     % Make sure dimensions are exactly ndimx, ndimy, coils
-                    kdatai = kdatai(1:ndimx,1:ndimy,1:ndimz,:);
+                    kDatai = kDatai(1:ndimx,1:ndimy,1:ndimz,:);
 
                     % FFT
                     imageIm = zeros(ndimx,ndimy,ndimz,obj.nrCoils);
                     for coil = 1:obj.nrCoils
-                        imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kdatai(:,:,:,coil)));
+                        imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kDatai(:,:,:,coil)));
                     end
 
                     % Root sum of squares
@@ -3278,7 +3329,7 @@ classdef proudData
             end
 
             % Combine slabs with overlap if present
-            if dims>1
+            if dims > 1
 
                 nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                 
@@ -3298,11 +3349,11 @@ classdef proudData
                 
                 % Resulting image size + 2 * overlap on the image borders
                 dimzs = size(imageSlab,3);
-                totaldimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
+                totalDimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
 
-                imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
-                phaseImageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
-                avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                imageMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
+                phaseImageMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
+                avgMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
     
                 % Concatenate the overlapping matrices
                 z1 = 1;
@@ -4410,6 +4461,53 @@ classdef proudData
 
         end % Reco3DuteNUFFT
 
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Suppress Gibbs ringing
+        % ---------------------------------------------------------------------------------
+        function obj = unRing(obj,app)
+
+            try
+
+                if ismac
+
+                    app.TextMessage('Gibbs ringing suppression ...');
+
+                    im = obj.images;
+
+                    % params - 3x1 array with [minW maxW nsh]
+                    % nsh discretization of subpixel spaceing (default 20)
+                    % minW  left border of window used for TV computation (default 1)
+                    % maxW  right border of window used for TV computation (default 3)
+
+                    params = [1 3 20];
+
+                    % image dimensions (X, Y, Z, NR, NFA, NE)
+
+                    nDyn = size(im,4);
+                    nFA = size(im,5);
+                    nTE = size(im,6);
+
+                    for dyn = 1:nDyn
+                        for fas = 1:nFA
+                            for tes = 1:nTE
+                                im(:,:,:,dyn,fas,tes) = ringRm(squeeze(im(:,:,:,dyn,fas,tes)),params);
+                            end
+                        end
+                    end
+
+                    obj.images = im;
+
+                end
+
+            catch ME
+                app.TextMessage(ME.message);
+            end
+
+        end % unRing
+        
 
 
 

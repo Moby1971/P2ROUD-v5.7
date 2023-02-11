@@ -4481,21 +4481,40 @@ classdef proudData
                     % nsh discretization of subpixel spaceing (default 20)
                     % minW  left border of window used for TV computation (default 1)
                     % maxW  right border of window used for TV computation (default 3)
-
                     params = [1 3 20];
 
                     % image dimensions (X, Y, Z, NR, NFA, NE)
-
+                    nSlices = size(im,3);
                     nDyn = size(im,4);
                     nFA = size(im,5);
                     nTE = size(im,6);
 
-                    for dyn = 1:nDyn
-                        for fas = 1:nFA
-                            for tes = 1:nTE
-                                im(:,:,:,dyn,fas,tes) = ringRm(squeeze(im(:,:,:,dyn,fas,tes)),params);
+                    % unRing
+                    
+                    switch obj.dataType
+
+                        case {"2D","2Dradial","2Depi"}
+
+                            for slice = 1:nSlices
+                                for dyn = 1:nDyn
+                                    for fas = 1:nFA
+                                        for tes = 1:nTE
+                                            im(:,:,slice,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,slice,dyn,fas,tes))),params);
+                                        end
+                                    end
+                                end
                             end
-                        end
+
+                        case {"3D","3Dute"}
+
+                            for dyn = 1:nDyn
+                                for fas = 1:nFA
+                                    for tes = 1:nTE
+                                        im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
+                                    end
+                                end
+                            end
+
                     end
 
                     obj.images = im;
@@ -4503,7 +4522,9 @@ classdef proudData
                 end
 
             catch ME
+
                 app.TextMessage(ME.message);
+
             end
 
         end % unRing

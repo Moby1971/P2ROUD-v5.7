@@ -4471,55 +4471,51 @@ classdef proudData
 
             try
 
-                if ismac
+                app.TextMessage('Gibbs ringing suppression ...');
 
-                    app.TextMessage('Gibbs ringing suppression ...');
+                im = obj.images;
 
-                    im = obj.images;
+                % params - 3x1 array with [minW maxW nsh]
+                % nsh discretization of subpixel spaceing (default 20)
+                % minW  left border of window used for TV computation (default 1)
+                % maxW  right border of window used for TV computation (default 3)
+                params = [1 3 20];
 
-                    % params - 3x1 array with [minW maxW nsh]
-                    % nsh discretization of subpixel spaceing (default 20)
-                    % minW  left border of window used for TV computation (default 1)
-                    % maxW  right border of window used for TV computation (default 3)
-                    params = [1 3 20];
+                % image dimensions (X, Y, Z, NR, NFA, NE)
+                nSlices = size(im,3);
+                nDyn = size(im,4);
+                nFA = size(im,5);
+                nTE = size(im,6);
 
-                    % image dimensions (X, Y, Z, NR, NFA, NE)
-                    nSlices = size(im,3);
-                    nDyn = size(im,4);
-                    nFA = size(im,5);
-                    nTE = size(im,6);
+                % unRing
 
-                    % unRing
-                    
-                    switch obj.dataType
+                switch obj.dataType
 
-                        case {"2D","2Dradial","2Depi"}
+                    case {"2D","2Dradial","2Depi"}
 
-                            for slice = 1:nSlices
-                                for dyn = 1:nDyn
-                                    for fas = 1:nFA
-                                        for tes = 1:nTE
-                                            im(:,:,slice,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,slice,dyn,fas,tes))),params);
-                                        end
-                                    end
-                                end
-                            end
-
-                        case {"3D","3Dute"}
-
+                        for slice = 1:nSlices
                             for dyn = 1:nDyn
                                 for fas = 1:nFA
                                     for tes = 1:nTE
-                                        im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
+                                        im(:,:,slice,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,slice,dyn,fas,tes))),params);
                                     end
                                 end
                             end
+                        end
 
-                    end
+                    case {"3D","3Dute"}
 
-                    obj.images = im;
+                        for dyn = 1:nDyn
+                            for fas = 1:nFA
+                                for tes = 1:nTE
+                                    im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
+                                end
+                            end
+                        end
 
                 end
+
+                obj.images = im;
 
             catch ME
 

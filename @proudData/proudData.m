@@ -128,6 +128,7 @@ classdef proudData
         multiFlipAngles_flag = false                        % multiple flip angles true/false
         multiCoil_flag = false                              % multiple receiver coils true/false
         multiSlab_flag = false                              % multiple 3D slabs true/false
+        halfFourier_flag = false                            % half Fourier imaging
         segmentedData_flag = false                          % segmented data acquisition true/false
         validTrajectory_flag = false                        % valid k-space trajectory true/false
         rprFile_flag = false                                % RPR file data available true/false
@@ -1383,16 +1384,16 @@ classdef proudData
 
                             case 3
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[3,1,2]);
-
+                         
                             case 4
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[4,2,3,1]);
-
+                         
                             case 5
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[5,3,4,1,2]);
-
+                         
                             case 6
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[6,4,5,1,2,3]);
-
+                         
                         end
 
                     end
@@ -2209,6 +2210,7 @@ classdef proudData
 
         % ---------------------------------------------------------------------------------
         % Apply Tukey k-space filter
+        % Version: February 2023
         % ---------------------------------------------------------------------------------
         function obj = applyTukey(obj)
 
@@ -2217,53 +2219,65 @@ classdef proudData
             dimy = size(obj.rawKspace{1},2);
             dimz = size(obj.rawKspace{1},3);
 
-            switch obj.dataType
-
-                case {"2D","2Depi"}
-
-                    kSpaceSum = zeros(dimx,dimy);
-                    for i=1:obj.nrCoils
-                        kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[3 4 5 6 7 8]));
-                    end
-                    [row, col] = find(ismember(kSpaceSum, max(kSpaceSum(:))));
-                    for i = 1:obj.nrCoils
-                        flt = proudData.circTukey2D(dimx,dimy,row,col,filterWidth);
-                        tukeyFilter(:,:,1,1,1,1) = flt;
-                        obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                    end
-
-                case "2Dradial"
+            % Normalize k-space to convenient range
+            for i = 1:obj.nrCoils
+                m(i) = max(abs(obj.rawKspace{i}(:)));
+            end
+            for i = 1:obj.nrCoils
+                obj.rawKspace{i} = 16383*obj.rawKspace{i}/max(m);
+            end
             
-                    % Probably better to apply after center shift
-                
-                    % tmpFilter = tukeywin(dimx,filterWidth);
-                    % for i = 1:obj.nrCoils
-                    %   tukeyFilter(:,1,1,1,1,1) = tmpFilter;
-                    %   obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                    % end
+            if ~obj.halfFourier_flag
 
-                case "3D"
+                switch obj.dataType
 
-                    kSpaceSum = zeros(dimx,dimy,dimz);
-                    for i=1:obj.nrCoils
-                        kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[4 5 6 7 8]));
-                    end
-                    [~,idx] = max(kSpaceSum(:));
-                    [lev, row, col] = ind2sub(size(kSpaceSum),idx);
-                    for i=1:obj.nrCoils
-                        flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,filterWidth);
-                        tukeyFilter(:,:,:,1,1,1) = flt;
-                        obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                    end
+                    case {"2D","2Depi"}
 
-                case "3Dute"
+                        kSpaceSum = zeros(dimx,dimy);
+                        for i = 1:obj.nrCoils
+                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[3 4 5 6 7 8]));
+                        end
+                        [row, col] = find(ismember(kSpaceSum, max(kSpaceSum(:))));
+                        for i = 1:obj.nrCoils
+                            flt = proudData.circTukey2D(dimx,dimy,row,col,filterWidth);
+                            tukeyFilter(:,:,1,1,1,1) = flt;
+                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                        end
 
-                    tmpFilter = tukeywin(2*dimx,filterWidth/2);
-                    tmpFilter = tmpFilter(dimx+1:end);
-                    for i = 1:obj.nrCoils
-                        tukeyFilter(:,1,1,1,1,1) = tmpFilter;
-                        obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                    end
+                    case "2Dradial"
+
+                        % Probably better to apply after center shift
+
+                        % tmpFilter = tukeywin(dimx,filterWidth);
+                        % for i = 1:obj.nrCoils
+                        %   tukeyFilter(:,1,1,1,1,1) = tmpFilter;
+                        %   obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                        % end
+
+                    case "3D"
+
+                        kSpaceSum = zeros(dimx,dimy,dimz);
+                        for i = 1:obj.nrCoils
+                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[4 5 6 7 8]));
+                        end
+                        [~,idx] = max(kSpaceSum(:));
+                        [lev, row, col] = ind2sub(size(kSpaceSum),idx);
+                        for i=1:obj.nrCoils
+                            flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,filterWidth);
+                            tukeyFilter(:,:,:,1,1,1) = flt;
+                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                        end
+
+                    case "3Dute"
+
+                        tmpFilter = tukeywin(2*dimx,filterWidth/2);
+                        tmpFilter = tmpFilter(dimx+1:end);
+                        for i = 1:obj.nrCoils
+                            tukeyFilter(:,1,1,1,1,1) = tmpFilter;
+                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                        end
+
+                end
 
             end
 
@@ -2692,12 +2706,15 @@ classdef proudData
 
 
 
+
         % ---------------------------------------------------------------------------------
-        % Image reconstruction: FFT 2D
+        % Image reconstruction: FFT 2D 
+        % Version February 2023
         % ---------------------------------------------------------------------------------
         function obj = fftReco2D(obj,app,flipAngle,echoTime)
 
             kSpaceRaw = cell(obj.nrCoils);
+            kSpaceRawOrig = cell(obj.nrCoils);
             for i=1:obj.nrCoils
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
             end
@@ -2708,6 +2725,7 @@ classdef proudData
             dimy = size(kSpaceRaw{1},2);
             dimz = size(kSpaceRaw{1},3);
             dimd = size(kSpaceRaw{1},4);
+            dimc = obj.nrCoils;
 
             % Requested dimensions
             ndimx = app.XEditField.Value;
@@ -2727,74 +2745,77 @@ classdef proudData
             end
 
             % Kspace data x,y,NR,slices,coils
-            kSpace = zeros(dimx,dimy,ndimd,ndimz,obj.nrCoils);
-
+            kSpace = zeros(dimx,dimy,ndimd,ndimz,dimc);
+       
             if app.AutoSensitivityCheckBox.Value == 1
-                for i = 1:obj.nrCoils
+                for i = 1:dimc
                     kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
                 end
             else
-                for i = 1:obj.nrCoils
+                for i = 1:dimc
                     kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilSensitivities(i)*obj.coilActive_flag(i);
                 end
             end
 
             % Preallocate
-            imagesOut = zeros(ndimx,ndimy,ndimz,ndimd);
-            phaseImagesOut = zeros(ndimx,ndimy,ndimz,ndimd);
-
+            imagesOut = zeros(ndimx,ndimy,ndimz,ndimd,dimc);
+        
             % Slice and dynamic loop
             for slice = 1:ndimz
 
                 for dynamic = 1:ndimd
 
-                    % Kspace of dynamic and slice
-                    kData = squeeze(kSpace(:,:,dynamic,slice,:));
-
-                    % Zero-fill or crop x-dimension
-                    if ndimx > dimx
-                        padsizex = round((ndimx - dimx)/2);
-                        kdatai = padarray(kData,[padsizex,0,0],'both');
+                    % Homodyne / normal FFT
+                    if obj.halfFourier_flag
+                        app.TextMessage('Homodyne FFT reconstruction ...');
+                        kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
+                        image2D = zeros(dimx,dimy,nnz(obj.coilActive_flag));
+                        imageIn(:,:,1,:) = kdatai(:,:,obj.coilActive_flag);
+                        image2D(:,:,:) = squeeze(homodyne(imageIn,app));
                     else
-                        cropsize = round((dimx - ndimx)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kData(cropsize+1:end-cropsize,:,:);
+                        app.TextMessage('Standard FFT reconstruction ...');
+                        kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
+                        image2D = zeros(dimx,dimy,dimc);
+                        for coil = 1:dimc
+                            image2D(:,:,coil) = proudData.fft2Dmri(squeeze(kdatai(:,:,coil)));
+                        end
                     end
 
-                    % Zero-fill or crop y-dimension
-                    if ndimy > dimy
-                        padsizey = round((ndimy - dimy)/2);
-                        kdatai = padarray(kdatai,[0,padsizey,0],'both');
-                    else
-                        cropsize = round((dimy - ndimy)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,cropsize+1:end-cropsize,:);
-                    end
+                    % Zero-fill or crop x-dimension and/or y-dimension
+                    if (ndimx~=dimx) || (ndimy~=dimy)
 
-                    % Make sure dimensions are exactly ndimx, ndimy, coils
-                    kdatai = kdatai(1:ndimx,1:ndimy,:);
+                        % Back to k-space
+                        kdatai = obj.fft2Dmri(image2D);
 
-                    % FFT
-                    imageTmp = zeros(ndimx,ndimy,obj.nrCoils);
-                    for coil = 1:obj.nrCoils
-                        imageTmp(:,:,coil) = proudData.fft2Dmri(squeeze(kdatai(:,:,coil)));
-                    end
+                        if ndimx > dimx
+                            padsizex = round((ndimx - dimx)/2);
+                            kdatai = padarray(kdatai,[padsizex,0,0],'both');
+                        else
+                            cropsize = round((dimx - ndimx)/2)-1;
+                            cropsize(cropsize<0)=0;
+                            kdatai = kdatai(cropsize+1:end-cropsize,:,:);
+                        end
 
-                    % Sum of squares
-                    image2D = rssq(imageTmp,3);
-                    
-                    % Phase images
-                    image2Dphase = mean(angle(imageTmp),3);
-                    
-                    % Denoising
-                    if app.DeNoiseCheckBox.Value
-                        [image2D,~,~] = wdenoise2(image2D,'CycleSpinning',1);
+                        if ndimy > dimy
+                            padsizey = round((ndimy - dimy)/2);
+                            kdatai = padarray(kdatai,[0,padsizey,0],'both');
+                        else
+                            cropsize = round((dimy - ndimy)/2)-1;
+                            cropsize(cropsize<0)=0;
+                            kdatai = kdatai(:,cropsize+1:end-cropsize,:);
+                        end
+
+                        % Make sure dimensions are exactly ndimx, ndimy, coils
+                        kdatai = kdatai(1:ndimx,1:ndimy,:);
+
+                        % Back to image space
+                        image2D = obj.ifft2Dmri(kdatai);
+             
                     end
 
                     % Return the image
-                    imagesOut(:,:,slice,dynamic) = image2D;
-                    phaseImagesOut(:,:,slice,dynamic) = image2Dphase;
-
+                    imagesOut(:,:,slice,dynamic,:) = image2D;
+           
                 end
 
             end
@@ -2802,16 +2823,14 @@ classdef proudData
             % Flip dimensions if required
             if obj.PHASE_ORIENTATION == 1
                 imagesOut = flip(imagesOut,2);
-                phaseImagesOut = flip(phaseImagesOut,2);
             else
                 imagesOut = flip(flip(imagesOut,2),1);
-                phaseImagesOut = flip(flip(phaseImagesOut,2),1);
             end
 
             % Return the images object
-            obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
+            obj.images(:,:,:,:,flipAngle,echoTime) = abs(rssq(imagesOut,5));
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = mean(angle(imagesOut),5);
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = mean(angle(imagesOut),5);
 
         end %fftReco2D
 
@@ -3063,17 +3082,15 @@ classdef proudData
 
                     % Make the mask
                     maski = maski./maski;
-                    maski(isnan(maski)) = 1;
+                    maski(isnan(maski)) = 0;
                     maski = logical(maski);
-
-                    % Size of the data
-                    [nx,ny,nz,nr,nc] = size(kdatai);
 
                     % Normalize the data in the range of approx 0 - 1 for better numerical stability
                     kdatai = kdatai/max(abs(kdatai(:)));
 
                     % Coil sensitivity map
-                    b1 = ones(nx,ny,nz,nr,nc);
+                    [nx,ny,nz,~,nc] = size(kdatai);
+                    b1 = ones(nx,ny,nz,nc);
 
                     % Data
                     param.y = kdatai;
@@ -3204,6 +3221,8 @@ classdef proudData
 
 
 
+
+
         % ---------------------------------------------------------------------------------
         % Image reconstruction: FFT 3D
         % ---------------------------------------------------------------------------------
@@ -3303,14 +3322,7 @@ classdef proudData
 
                     % Phase images (mean of coils)
                     image3Dphase = mean(angle(imageIm),4);
-                    
-                    % Denoising
-                    if app.DeNoiseCheckBox.Value
-                        for i = 1:size(image3D,3)
-                            image3D(:,:,i) = wdenoise2(squeeze(image3D(:,:,i)),'CycleSpinning',1);
-                        end
-                    end
-
+                
                     % Return the image
                     imageSlab(:,:,:,dynamic,slab) = image3D;
                     phaseImageSlab(:,:,:,dynamic,slab) = image3Dphase;
@@ -4464,6 +4476,62 @@ classdef proudData
 
 
 
+
+        % ---------------------------------------------------------------------------------
+        % PCA denoising
+        % ---------------------------------------------------------------------------------
+        function obj = PCAdenoise(obj,app)
+
+            try
+
+                if app.DeNoiseCheckBox.Value
+
+                    app.TextMessage('PCA image denoising ...');
+
+                    % Images
+                    im = obj.images;
+
+                    % Image dimensions (X, Y, Z, NR, NFA, NE)
+                    nDyn = size(im,4);
+                    nFA = size(im,5);
+                    nTE = size(im,6);
+
+                    % Denoising window
+                    w = app.DeNoiseWindowEditField.Value;
+                    window = [w w];
+                    if window(1) > size(im,1)/2
+                        window(1) = round(size(im,1)/2);
+                    end
+                    if window(2) > size(im,2)/2
+                        window(2) = round(size(im,2)/2);
+                    end
+
+                    % Loop over all dynamics, flip angles, echo times
+                    for dyn = 1:nDyn
+                        for fas = 1:nFA
+                            for tes = 1:nTE
+                                im(:,:,:,dyn,fas,tes) = denoise(double(squeeze(im(:,:,:,dyn,fas,tes))),window);
+                            end
+                        end
+                    end
+
+                    % Return the images object
+                    obj.images = im;
+
+                end
+
+            catch ME
+
+                app.TextMessage(ME.message);
+
+            end
+
+        end % PCAdenoise
+
+
+
+
+
         % ---------------------------------------------------------------------------------
         % Suppress Gibbs ringing
         % ---------------------------------------------------------------------------------
@@ -4895,7 +4963,7 @@ classdef proudData
                     );
             end
 
-            fid = fopen(strcat(exportdir,filesep,'recoparmeters_',app.tag,'.txt'),'wt');
+            fid = fopen(strcat(exportdir,filesep,'recoparameters_',app.tag,'.txt'),'wt');
             fprintf(fid,pars);
             fclose(fid);
 

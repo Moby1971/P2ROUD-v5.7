@@ -304,14 +304,17 @@ classdef proudData
                     [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','cen');
                 end
               
-                if isfield(parameters,'pe2_centric_on')
-                    % If views2 direction turns out to be linearly ordered re-read the data
-                    if parameters.pe2_centric_on == 0
-                        [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
-                    end
+                if isfield(parameters,'pe2_centric_on') && isfield(parameters,'NO_VIEWS_2')
+                     % If views2 direction turns out to be linearly ordered re-read the data
+                     if parameters.pe2_centric_on == 0 && parameters.NO_VIEWS_2 > 1
+                         [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
+                     end
                 end
 
             end
+
+
+            disp(parameters)
 
             % Assign the MRD footer variables to object variables
 
@@ -1592,7 +1595,7 @@ classdef proudData
                                     % Calculate phase difference between even and odd echoes
                                     PHshift = zeros(firsty,1);
                                     for nav=1:firsty
-                                        navecho1 = squeeze(kSpaceRaw(round(dimx/2)+1,1,z,repCounter,faCounter,teCounter));
+                                        navecho1 = squeeze(kSpaceRaw(round(dimx/2)+1, 1 ,z,repCounter,faCounter,teCounter));
                                         navecho2 = squeeze(kSpaceRaw(round(dimx/2)+1,nav,z,repCounter,faCounter,teCounter));
                                         PHshift(nav) = phase(navecho2) - phase(navecho1);
                                     end

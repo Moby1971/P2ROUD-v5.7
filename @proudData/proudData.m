@@ -313,9 +313,7 @@ classdef proudData
 
             end
 
-
-            disp(parameters)
-
+        
             % Assign the MRD footer variables to object variables
 
             if isfield(parameters,'filename')
@@ -1756,6 +1754,35 @@ classdef proudData
         function obj = sort2DsegmKspaceMRD(obj, app)
 
             app.TextMessage('Segmented k-space data ...');
+         
+            [dimx, dimy, dimz, nrd, nfa, ne] = size(obj.rawKspace{1});
+
+            nrLines = obj.lines_per_segment;
+            nrc = obj.nrCoils;
+
+            for coil = 1:nrc
+
+                for slices = 1:dimz
+
+                    for flipAngle = 1:nfa
+
+                        for dynamic = 1:nrd
+
+                            ks = squeeze(obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:));
+                            ks = permute(ks,[3 2 1]);
+                            ks = reshape(ks(:),[nrLines ne dimy/nrLines dimx]);
+                            ks = permute(ks,[2 1 3 4]);
+                            ks = reshape(ks(:),[ne dimx dimy]);
+                            ks = permute(ks,[3 2 1]);
+                            obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:) = ks(:,:,:);
+
+                        end
+
+                    end
+
+                end
+
+            end
 
         end % sort2DsegmKspaceMRD
 

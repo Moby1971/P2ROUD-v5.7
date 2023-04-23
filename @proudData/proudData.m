@@ -4522,6 +4522,7 @@ classdef proudData
                     im = obj.images;
 
                     % Image dimensions (X, Y, Z, NR, NFA, NE)
+                    nSlices = size(im,3);
                     nDyn = size(im,4);
                     nFA = size(im,5);
                     nTE = size(im,6);
@@ -4535,14 +4536,38 @@ classdef proudData
                     if window(2) > size(im,2)/2
                         window(2) = round(size(im,2)/2);
                     end
+                 
+                    % Loop over all slices, dynamics, flip angles, echo times
+                    % Choose 2-dim image + extra dimension
+                    if nTE > 1
 
-                    % Loop over all dynamics, flip angles, echo times
-                    for dyn = 1:nDyn
-                        for fas = 1:nFA
-                            for tes = 1:nTE
-                                im(:,:,:,dyn,fas,tes) = denoise(double(squeeze(im(:,:,:,dyn,fas,tes))),window);
+                        for slice = 1:nSlices
+                            for dyn = 1:nDyn
+                                for fas = 1:nFA
+                                    im(:,:,slice,dyn,fas,:) = denoise(double(squeeze(im(:,:,slice,dyn,fas,:))),window);
+                                end
                             end
                         end
+
+                    elseif nFA > 1
+
+                        for slice = 1:nSlices
+                            for dyn = 1:nDyn
+                                im(:,:,slice,dyn,:,1) = denoise(double(squeeze(im(:,:,slice,dyn,:,1))),window);
+                            end
+                        end
+
+                    elseif nDyn > 1
+
+                        for slice = 1:nSlices
+                            im(:,:,slice,:,1,1) = denoise(double(squeeze(im(:,:,slice,:,1,1))),window);
+                        end
+
+                    else
+
+                        % nTE, nFA, nDyn = 1
+                        im(:,:,:,1,1,1) = denoise(double(squeeze(im(:,:,:,1,1,1))),window);
+
                     end
 
                     % Return the images object
@@ -4580,37 +4605,17 @@ classdef proudData
                 params = [1 3 20];
 
                 % image dimensions (X, Y, Z, NR, NFA, NE)
-                nSlices = size(im,3);
                 nDyn = size(im,4);
                 nFA = size(im,5);
                 nTE = size(im,6);
 
                 % unRing
-
-                switch obj.dataType
-
-                    case {"2D","2Dradial","2Depi"}
-
-                        for slice = 1:nSlices
-                            for dyn = 1:nDyn
-                                for fas = 1:nFA
-                                    for tes = 1:nTE
-                                        im(:,:,slice,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,slice,dyn,fas,tes))),params);
-                                    end
-                                end
-                            end
+                for dyn = 1:nDyn
+                    for fas = 1:nFA
+                        for tes = 1:nTE
+                            im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
                         end
-
-                    case {"3D","3Dute"}
-
-                        for dyn = 1:nDyn
-                            for fas = 1:nFA
-                                for tes = 1:nTE
-                                    im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
-                                end
-                            end
-                        end
-
+                    end
                 end
 
                 obj.images = im;

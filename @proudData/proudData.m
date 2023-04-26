@@ -1754,27 +1754,39 @@ classdef proudData
         function obj = sort2DsegmKspaceMRD(obj, app)
 
             app.TextMessage('Segmented k-space data ...');
-         
-            [dimx, dimy, dimz, nrd, nfa, ne] = size(obj.rawKspace{1});
 
-            nrLines = obj.lines_per_segment;
-            nrc = obj.nrCoils;
+            % PPL version
+            version = regexp(obj.PPL,'\d*','Match');
+            version = str2num(cell2mat(version(end)));
+            crit1 = version > 634;
 
-            for coil = 1:nrc
+            % FLASH yes or no ?
+            crit2 = contains(obj.PPL,"flash");
 
-                for slices = 1:dimz
+            if crit1 && crit2
 
-                    for flipAngle = 1:nfa
+                [dimx, dimy, dimz, nrd, nfa, ne] = size(obj.rawKspace{1});
 
-                        for dynamic = 1:nrd
+                nrLines = obj.lines_per_segment;
+                nrc = obj.nrCoils;
 
-                            ks = squeeze(obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:));
-                            ks = permute(ks,[3 2 1]);
-                            ks = reshape(ks(:),[nrLines ne dimy/nrLines dimx]);
-                            ks = permute(ks,[2 1 3 4]);
-                            ks = reshape(ks(:),[ne dimx dimy]);
-                            ks = permute(ks,[3 2 1]);
-                            obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:) = ks(:,:,:);
+                for coil = 1:nrc
+
+                    for slices = 1:dimz
+
+                        for flipAngle = 1:nfa
+
+                            for dynamic = 1:nrd
+
+                                ks = squeeze(obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:));
+                                ks = permute(ks,[3 2 1]);
+                                ks = reshape(ks(:),[nrLines ne dimy/nrLines dimx]);
+                                ks = permute(ks,[2 1 3 4]);
+                                ks = reshape(ks(:),[ne dimx dimy]);
+                                ks = permute(ks,[3 2 1]);
+                                obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:) = ks(:,:,:);
+
+                            end
 
                         end
 
@@ -2789,7 +2801,14 @@ classdef proudData
 
             % Preallocate
             imagesOut = zeros(ndimx,ndimy,ndimz,ndimd,dimc);
-        
+
+            % Message
+            if obj.halfFourier_flag
+                app.TextMessage('Homodyne FFT reconstruction ...');
+            else
+                app.TextMessage('Standard FFT reconstruction ...');
+            end
+
             % Slice and dynamic loop
             for slice = 1:ndimz
 
@@ -2797,13 +2816,11 @@ classdef proudData
 
                     % Homodyne / normal FFT
                     if obj.halfFourier_flag
-                        app.TextMessage('Homodyne FFT reconstruction ...');
                         kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
                         image2D = zeros(dimx,dimy,nnz(obj.coilActive_flag));
                         imageIn(:,:,1,:) = kdatai(:,:,obj.coilActive_flag);
                         image2D(:,:,:) = squeeze(homodyne(imageIn,app));
                     else
-                        app.TextMessage('Standard FFT reconstruction ...');
                         kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
                         image2D = zeros(dimx,dimy,dimc);
                         for coil = 1:dimc

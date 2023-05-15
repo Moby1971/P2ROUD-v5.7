@@ -5679,25 +5679,34 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Low rank threshold 3D
         % ---------------------------------------------------------------------------------
-        function Xnew = lowRankThresh3D(Xold,kSize,thresh)
+        function Xnew = lowRankThresh3D(Xold, kSize, thresh)
 
+            % Apply low rank thresholding to 3D data
+
+            % Round the threshold to the nearest integer value
             thresh = round(thresh);
 
+            % Define indices of the singular values to keep
             keep = 1:thresh;
 
-            [sx,sy,sz,~] = size(Xold);
-            tmp = proudData.im2row3D(Xold,kSize);
-            [tsx,tsy,Nc] = size(tmp);
-            A = reshape(proudData.im2row3D(Xold,kSize),tsx,tsy*Nc);
+            % Get the size of the input data
+            [sx, sy, sz, ~] = size(Xold);
 
-            [U,S,V] = svd(A,'econ');
-            A = U(:,keep)*S(keep,keep)*V(:,keep)';
+            % Convert the input data into a 2D matrix
+            tmp = proudData.im2row3D(Xold, kSize);
+            [tsx, tsy, Nc] = size(tmp);
+            A = reshape(proudData.im2row3D(Xold, kSize), tsx, tsy*Nc);
 
-            A = reshape(A,tsx,tsy*Nc);
+            % Perform singular value decomposition and keep only the top k singular values
+            [U, S, V] = svd(A, 'econ');
+            A = U(:, keep)*S(keep, keep)*V(:, keep)';
 
-            Xnew = proudData.row2im3D(A,[sx,sy,sz,Nc],kSize);
+            % Reshape the data and convert it back to 3D
+            A = reshape(A, tsx, tsy*Nc);
+            Xnew = proudData.row2im3D(A, [sx, sy, sz, Nc], kSize);
 
         end % lowRankThresh3D
+
 
 
 
@@ -5706,24 +5715,36 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function Xnew = lowRankThresh2D(Xold,kSize,thresh)
 
+            % Apply low rank thresholding to 2D data
+
+            % Round threshold to nearest integer
             thresh = round(thresh);
 
+            % Define indices of the singular values to keep
             keep = 1:thresh;
-       
+
+            % Get size of input matrix
             [sx,sy,Nc] = size(Xold);
-            tmp = proudData.im2row2D(Xold,kSize); 
 
+            % Convert the 3D matrix to a 2D matrix, where each row corresponds to a window
+            tmp = proudData.im2row2D(Xold,kSize);
+
+            % Get size of temporary matrix
             [tsx,tsy,tsz] = size(tmp);
-            A = reshape(proudData.im2row2D(Xold,kSize),tsx,tsy*tsz);
 
+            % Apply SVD to temporary matrix
+            A = reshape(proudData.im2row2D(Xold,kSize),tsx,tsy*tsz);
             [U,S,V] = svd(A,'econ');
+
+            % Perform low-rank approximation by keeping only the first 'thresh' singular values
             A = U(:,keep)*S(keep,keep)*V(:,keep)';
 
-            A = reshape(A,tsx,tsy,tsz);       
-
+            % Reshape the data and convert it back to 2D
+            A = reshape(A,tsx,tsy,tsz);
             Xnew = proudData.row2im2D(A,[sx,sy,Nc],kSize);
 
         end % lowRankThresh2D
+
 
 
 
@@ -5791,14 +5812,26 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function res = im2row3D(im, winSize)
 
+            % This function converts an input 3D image into a 2D matrix
+            % with each column being a vectorized patch of the image
+            % using a sliding window approach.
+
+            % Get the size of the input image
             [sx,sy,sz,nc] = size(im);
+
+            % Allocate memory for the output matrix
             res = zeros((sx-winSize(1)+1)*(sy-winSize(2)+1)*(sz-winSize(3)+1),prod(winSize),nc);
 
+            % Initialize counter
             count=0;
+
+            % Slide a window over the image
             for z=1:winSize(3)
                 for y=1:winSize(2)
                     for x=1:winSize(1)
+                        % Increment counter
                         count = count+1;
+                        % Extract and reshape each patch of the image and store it in a column of the output matrix
                         res(:,count,:) = reshape(im(x:sx-winSize(1)+x,y:sy-winSize(2)+y,z:sz-winSize(3)+z),...
                             (sx-winSize(1)+1)*(sy-winSize(2)+1)*(sz-winSize(3)+1),nc);
                     end
@@ -5807,20 +5840,38 @@ classdef proudData
 
         end % im2row3D
 
-
                 
+
         % ---------------------------------------------------------------------------------
         % image to rows 2D
         % ---------------------------------------------------------------------------------
         function res = im2row2D(im, winSize)
 
+            % This function converts a 2D image to a matrix of overlapping patches of
+            % size winSize
+            %
+            % Input:
+            %   - im: the input image
+            %   - winSize: the size of the sliding window
+            %
+            % Output:
+            %   - res: a matrix containing overlapping patches from the input image
+
+            % Get the dimensions of the input image
             [sx,sy,sz] = size(im);
+
+            % Compute the size of the output matrix
             res = zeros((sx-winSize(1)+1)*(sy-winSize(2)+1),prod(winSize),sz);
 
+            % Counter variable to keep track of the column in the output matrix
             count=0;
+
+            % Loop over the rows and columns of the sliding window
             for y=1:winSize(2)
                 for x=1:winSize(1)
                     count = count+1;
+                    % Extract the patches from the input image and reshape them
+                    % into columns of the output matrix
                     res(:,count,:) = reshape(im(x:sx-winSize(1)+x,y:sy-winSize(2)+y,:),...
                         (sx-winSize(1)+1)*(sy-winSize(2)+1),1,sz);
                 end
@@ -5834,6 +5885,18 @@ classdef proudData
         % rows to image 3D
         % ---------------------------------------------------------------------------------
         function [res,W] = row2im3D(mtx, imSize, winSize)
+            
+            % This function reconstructs an image from a matrix of overlapping patches.
+            % It operates in 3D, allowing for multi-coil MRI data.
+            %
+            % INPUTS:
+            %   mtx - matrix of overlapping patches (output of im2row3D)
+            %   imSize - size of the output image [x, y, z]
+            %   winSize - size of the window used to extract patches [x, y, z]
+            %
+            % OUTPUTS:
+            %   res - reconstructed image
+            %   W - weight matrix used for normalization
 
             nCoils = size(mtx,4);
             sx = imSize(1);
@@ -5862,10 +5925,24 @@ classdef proudData
         % rows to image 2D
         % ---------------------------------------------------------------------------------
         function [res,W] = row2im2D(mtx,imSize, winSize)
+            
+            % This function reshapes a 3D matrix of row vectors into a 2D image of size imSize,
+            % using a sliding window of size winSize to combine the rows.
+            %
+            % Inputs:
+            % - mtx: a 3D matrix of size (winSize(1)*winSize(2), sz, channels)
+            % - imSize: a vector [sx, sy] representing the size of the output image
+            % - winSize: a vector [wx, wy] representing the size of the sliding window
+            %
+            % Outputs:
+            % - res: a 3D matrix representing the reshaped image of size (sx, sy, channels)
+            % - W: a 3D matrix representing the weight matrix of size (sx, sy, channels)
 
-            sz = size(mtx,3);
-            sx = imSize(1); 
+            sx = imSize(1);
             sy = imSize(2);
+            sz = size(mtx,3);
+
+            % Initialize res and W as 3D matrices of zeros
             res = zeros(imSize(1),imSize(2),sz);
             W = res;
 
@@ -5873,11 +5950,14 @@ classdef proudData
             for y=1:winSize(2)
                 for x=1:winSize(1)
                     count = count+1;
+                    % Update res with the current window and mtx count
                     res(x:sx-winSize(1)+x,y:sy-winSize(2)+y,:) = res(x:sx-winSize(1)+x,y:sy-winSize(2)+y,:) + reshape(mtx(:,count,:),(sx-winSize(1)+1),(sy-winSize(2)+1),sz);
+                    % Update W with the weight of the current window
                     W(x:sx-winSize(1)+x,y:sy-winSize(2)+y,:) = W(x:sx-winSize(1)+x,y:sy-winSize(2)+y,:)+1;
                 end
             end
 
+            % Divide res by W to get the final image
             res = res./W;
 
         end % row2im

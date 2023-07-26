@@ -8,8 +8,12 @@ function folderName = exportDicomDCM(app, dcmdir)
 % Proud data parameters object
 obj = app.proudDataPars;
 
+
+
 directory = app.dicomExportPath;
 image = obj.images;
+
+disp(directory)
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1

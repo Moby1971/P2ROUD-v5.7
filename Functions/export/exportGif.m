@@ -41,13 +41,20 @@ gifImages(gifImages > 255) = 255;
 
 % Aspect ratio
 aspectRatio = (app.FOVViewField1.Value/app.FOVViewField2.Value); %*(app.XEditField.Value/app.YEditField.Value);
-if obj.PHASE_ORIENTATION
-    aspectRatio = 1/aspectRatio;
-end
 
-% Oversample to increase image size, and aspect ratio
-numRows = 2*dimx;
-numCols = 2*round(dimy*aspectRatio);
+
+% Correct for non-square aspect ratio
+gifImageSize = 2*dimx; % size of longest axis
+dimy = gifImageSize;
+dimx = round(dimy * aspectRatio);
+if obj.PHASE_ORIENTATION
+    dimx = gifImageSize;
+    dimy = round(dimx * aspectRatio);
+end
+fct = max([dimx dimy]);
+numRows = round(gifImageSize * dimx / fct);
+numCols = round(gifImageSize * dimy / fct);
+
 
 % Export the gif images
 

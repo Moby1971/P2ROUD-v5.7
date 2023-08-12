@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % February 2023
+    % Aug 2023
     %
 
     properties
@@ -14,6 +14,7 @@ classdef proudData
         unsKspace = {}                                      % unsorted k-space data
         mrdKspace = []                                      % k-space data from MRD file
         images = []                                         % magnitude images
+        complexImages = []                                  % complex images
         phaseImages = []                                    % phase images
         phaseImagesOrig = []                                % original phase images (without unwrapping)
         flowImages = []                                     % flow images
@@ -33,11 +34,11 @@ classdef proudData
         filename;
         PPL = 'unknown'
 
-        % Sequence parameters   
+        % Sequence parameters
         dataType = '2D'                                     % data type (2D, 2Dms, 3D, 3Dute, 2Dradial)
         totalAcqTime = 0                                    % total acquisition time
         NO_SAMPLES = 1                                      % number of samples (readout)
-        SAMPLE_PERIOD                                       % sample period 
+        SAMPLE_PERIOD                                       % sample period
         NO_SAMPLES_ORIG = 1                                 % original number of samples (readout)
         NO_VIEWS = 1                                        % number of views1 (phase encoding 2)
         NO_VIEWS_ORIG = 1                                   % original number of views1 (phase encoding 2)
@@ -109,14 +110,14 @@ classdef proudData
         vencAmp = []                                        % MRD file VENC
         flowCompOn = 0                                      % flow compensation on (1) or off (0)
         vencTable = []                                      % VENC orientation table
-   
+
         % Navigator related
         no_samples_nav = 10                                 % number of navigator samples
         no_samples_discard = 35                             % number of points discarded after navigator
 
         % Segmentation related
         threshold = 0                                       % segmentation threshold
-        
+
         % Flags
         validFile_flag = false                              % valid MRD file true/false
         validReco_flag = false                              % valid reconstruction true/false
@@ -136,7 +137,7 @@ classdef proudData
         retroRecoScan_flag = false                          % MRD data from Retrospective app true/false
         coilActive_flag = [1 1 1 1 1 1 1]                   % active coil (1 = yes / 0 = no)
         sqlFlag = false                                     % SQL file available true / false
-  
+
         % Parameters from SQL file
         SQLnumberOfSlices = 1                               % number of slices
         SQLsliceGap = 0                                     % slice gap
@@ -150,8 +151,10 @@ classdef proudData
         % Image shifts & orientations
         xShift = 0                                          % image shift in X direction
         yShift = 0                                          % image shift in Y direction
+        zShift = 0                                          % image shift in Z direction
         fov_read_off = 0                                    % read-offset from MRD file
         fov_phase_off = 0                                   % phase-offset from MRD file
+        fov_slice_off = 0                                   % slice-offset from MRD file
         LRvec = [1 0 0]'                                    % left-right orientation vector
         APvec = [0 1 0]'                                    % anterior-posterior orientation vector
         HFvec = [0 0 1]'                                    % head-feet orientation vector
@@ -159,7 +162,7 @@ classdef proudData
         bottomLabel = ' ';                                  % bottom label
         leftLabel = ' ';                                    % left label
         rightLabel = ' ';                                   % right label
-     
+
     end % properties
 
 
@@ -207,7 +210,7 @@ classdef proudData
     % obj = calcFlow(obj)
     % obj = ExportRecoParametersFcn(obj, app, exportdir)
     % obj = calc2DimageShift(obj, image, app)
-    % 
+    %
     %
     % -----------------------------------------------------------------
     % Static methods
@@ -221,7 +224,7 @@ classdef proudData
     % output = fracCircShift(input,shiftsize)
     % [dydtx,dydty,dydtz] = partialDerivative3D(app,kTraj,xNew,calibSize)
     % [dydtx,dydty] = partialDerivative2D(app,kTraj,Xnew,calibSize)
-    % Xnew = lowRankThresh3D(Xold,kSize,thresh) 
+    % Xnew = lowRankThresh3D(Xold,kSize,thresh)
     % Xnew = lowRankThresh2D(Xold,kSize,thresh)
     % kSpaceNew = trajInterpolation(kSpaceOld,dShift)
     % res = im2row3D(im, winSize)
@@ -288,9 +291,9 @@ classdef proudData
 
             % Loop over all coils
             for i=1:obj.nrCoils
-            
+
                 app.TextMessage(strcat('Loading coil #',num2str(i)));
-                
+
                 if contains(mrdfile,'p2roud')
                     % Data previously generated by the P2ROUD app
                     obj.proudRecoScan_flag = true;
@@ -303,17 +306,17 @@ classdef proudData
                     % All other scanner-generated data
                     [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','cen');
                 end
-              
+
                 if isfield(parameters,'pe2_centric_on') && isfield(parameters,'NO_VIEWS_2')
-                     % If views2 direction turns out to be linearly ordered re-read the data
-                     if parameters.pe2_centric_on == 0 && parameters.NO_VIEWS_2 > 1
-                         [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
-                     end
+                    % If views2 direction turns out to be linearly ordered re-read the data
+                    if parameters.pe2_centric_on == 0 && parameters.NO_VIEWS_2 > 1
+                        [obj.rawKspace{i},~,parameters,obj.unsKspace{i}] = proudData.importMRD(fullfile(flist(i).folder,flist(i).name),'seq','seq');
+                    end
                 end
 
             end
 
-        
+
             % Assign the MRD footer variables to object variables
 
             if isfield(parameters,'filename')
@@ -348,9 +351,9 @@ classdef proudData
 
             if isfield(parameters,'NO_VIEWS')
                 if isfield(parameters,'PPL')
-                   if contains(parameters.PPL,"epi")
+                    if contains(parameters.PPL,"epi")
                         parameters.NO_VIEWS = parameters.no_switches;
-                   end
+                    end
                 end
                 obj.NO_VIEWS = parameters.NO_VIEWS;
                 obj.NO_VIEWS_ORIG = parameters.NO_VIEWS;
@@ -503,7 +506,7 @@ classdef proudData
             if isfield(parameters,'lines_per_segment')
                 obj.lines_per_segment = parameters.lines_per_segment;
             end
-            
+
             if isfield(parameters,'date')
                 obj.date = parameters.date;
             end
@@ -550,6 +553,10 @@ classdef proudData
                 obj.fov_phase_off = parameters.fov_phase_off;
             end
 
+            if isfield(parameters,'fov_slice_off')
+                obj.fov_slice_off = parameters.fov_slice_off;
+            end
+
             if isfield(parameters,'SAMPLE_PERIOD')
                 obj.SAMPLE_PERIOD = parameters.SAMPLE_PERIOD;
             end
@@ -561,7 +568,7 @@ classdef proudData
             if isfield(parameters,'no_pts_switch')
                 obj.no_pts_switch = parameters.no_pts_switch;
             end
-            
+
         end % readProudData
 
 
@@ -569,7 +576,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Read b-type scanner data   XXX currently not used XXX
         % ---------------------------------------------------------------------------------
-        function obj = readBtypeData(obj, app, mrdfile, flist) %#ok<*INUSL> 
+        function obj = readBtypeData(obj, app, mrdfile, flist) %#ok<*INUSL>
 
             obj.proudRecoScan_flag = false;
             obj.retroRecoScan_flag = false;
@@ -652,7 +659,7 @@ classdef proudData
             obj.date = datetime;
             obj.PPL = 'b-type sequence';
             obj.filename = 'btype';
-            obj.field_strength = str2num(info1.BF1)/42.58; %#ok<*ST2NM> 
+            obj.field_strength = str2num(info1.BF1)/42.58; %#ok<*ST2NM>
             obj.filename = 111;
             obj.pe1_order = 2;
             obj.radial_on = 0;
@@ -724,7 +731,7 @@ classdef proudData
                 % Imaging k-space
                 kspace = reshape(kspace,obj.NO_SLICES,obj.NO_SAMPLES,obj.nr_coils,obj.NO_VIEWS,obj.EXPERIMENT_ARRAY);
                 kspace = permute(kspace,[3,5,6,7,1,4,2]);
-          
+
             end
 
             % 3D data
@@ -760,7 +767,7 @@ classdef proudData
                 % K-space
                 kspace = reshape(kspace,obj.nr_coils,obj.NO_SAMPLES,obj.NO_VIEWS,obj.NO_VIEWS_2,obj.EXPERIMENT_ARRAY);
                 kspace = permute(kspace,[1,5,6,7,3,4,2]);
-            
+
             end
 
             % Flip readout if needed
@@ -897,7 +904,7 @@ classdef proudData
                 pos = strfind(inputfooter,txt);
 
                 if ~isempty(pos)
-                    
+
                     % Determine which part should be replaced
                     oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),newline)-1;
 
@@ -933,7 +940,7 @@ classdef proudData
         % Read SQL file
         % ---------------------------------------------------------------------------------
         function obj = readSQLfile(obj, app, filename)
-            
+
             try
                 fid = fopen(filename,'r');
                 obj.sqlFile = char(fread(fid,Inf,'uchar')');
@@ -1008,7 +1015,7 @@ classdef proudData
             obj.rightLabel  = ' ';
             obj.topLabel    = ' ';
             obj.bottomLabel = ' ';
-       
+
             try
 
                 if ismember(app.OrientationSpinner.Value,[1 7 10])
@@ -1017,7 +1024,7 @@ classdef proudData
                     obj.LRvec = [ 1  0  0 ]';
                     obj.APvec = [ 0  1  0 ]';
                     obj.HFvec = [ 0  0  1 ]';
-                  
+
                     % Rotate the vectors according to the angle values
                     % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
                     tinyAngle = 0.00001;
@@ -1039,7 +1046,7 @@ classdef proudData
 
                     labelsPrimary   = [ 'R','L' ; 'A','P' ; 'F','H'];
                     labelsSecondary = [ 'L','R' ; 'P','A' ; 'H','F'];
-               
+
                     % Sort the labels according to the starting orientation
                     labelsPrimary   = [labelsPrimary(indxLR1,indxLR2),labelsPrimary(indxAP1,indxAP2),labelsPrimary(indxHF1,indxHF2)];
                     labelsSecondary = [labelsSecondary(indxLR1,indxLR2),labelsSecondary(indxAP1,indxAP2),labelsSecondary(indxHF1,indxHF2)];
@@ -1068,7 +1075,7 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Read RPR 
+        % Read RPR
         % ---------------------------------------------------------------------------------
         function obj = readRprFile(obj, app, fn)
 
@@ -1115,7 +1122,7 @@ classdef proudData
         function obj = makeRprFile(obj, par)
 
             % Makes a new RPR file by replacing old values with new ones
-            % The RPR file will be used by the MR Solutions software to make a reconstruction 
+            % The RPR file will be used by the MR Solutions software to make a reconstruction
             % and import the data into preclinical
 
             inputrpr = obj.rprFile;
@@ -1157,7 +1164,7 @@ classdef proudData
                 pos = strfind(inputrpr,txt);
 
                 if ~isempty(pos)
-              
+
                     if ~isstring(var)
                         % Numeric values
                         oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
@@ -1275,7 +1282,7 @@ classdef proudData
             fwrite(fid1,temp,'float32');
 
             fwrite(fid1,newline);
-         
+
             % Write the footer
             fwrite(fid1,footer,'int8');
 
@@ -1385,16 +1392,16 @@ classdef proudData
 
                             case 3
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[3,1,2]);
-                         
+
                             case 4
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[4,2,3,1]);
-                         
+
                             case 5
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[5,3,4,1,2]);
-                         
+
                             case 6
                                 obj.rawKspace{i} = permute(obj.rawKspace{i},[6,4,5,1,2,3]);
-                         
+
                         end
 
                     end
@@ -1530,7 +1537,7 @@ classdef proudData
                 if obj.NO_ECHOES > 1
                     for j = 2:2:obj.NO_ECHOES
                         for i = 1:obj.nrCoils
-                           obj.rawKspace{i}(:,:,:,:,:,j) = flip(obj.rawKspace{i}(:,:,:,:,:,j),1);
+                            obj.rawKspace{i}(:,:,:,:,:,j) = flip(obj.rawKspace{i}(:,:,:,:,:,j),1);
                         end
                     end
                 end
@@ -1595,7 +1602,7 @@ classdef proudData
                                     for nav=1:firsty
                                         navecho1 = squeeze(kSpaceRaw(round(dimx/2)+1, 1 ,z,repCounter,faCounter,teCounter));
                                         navecho2 = squeeze(kSpaceRaw(round(dimx/2)+1,nav,z,repCounter,faCounter,teCounter));
-                                        PHshift(nav) = phase(navecho2) - phase(navecho1);
+                                        PHshift(nav) = angle(navecho2) - angle(navecho1);
                                     end
 
                                     % Sorting including phase correction based on navigator
@@ -1603,7 +1610,7 @@ classdef proudData
 
                                         idx = mod(j-firsty+1,firsty)+1;
                                         y = kTable(j)+round(firsty/2);
-                                   
+
                                         kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);%.*exp(-1i*PHshift(idx));
 
                                         for x = 1:dimx
@@ -1708,7 +1715,7 @@ classdef proudData
                                 for j = firsty+1:dimy
 
                                     y = kTable(j)+round(firsty/2);
-   
+
                                     kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);
 
                                     for x = 1:dimx
@@ -1747,7 +1754,7 @@ classdef proudData
 
 
 
-        
+
         % ---------------------------------------------------------------------------------
         % Sort 2D segmented k-space data
         % ---------------------------------------------------------------------------------
@@ -1851,7 +1858,7 @@ classdef proudData
 
                 % Loop over slices
                 for slice = 1:nrSlices
-                  
+
                     % Loop over desired number of frames
                     for dynamic = 1:frames
 
@@ -1937,7 +1944,7 @@ classdef proudData
                 nDyn = nFA;
                 app.NREditField.Value = 1;
             end
-        
+
             for coil = 1:obj.nrCoils
 
                 app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
@@ -2031,7 +2038,7 @@ classdef proudData
 
                                 % Fill averages space
                                 avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
-                            
+
                             end
 
                             % Fill the k-space trajectory array
@@ -2055,12 +2062,12 @@ classdef proudData
                 obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
 
                 % For multiple flip-angles
-                if nFA>1 
+                if nFA>1
                     obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
                 end
 
             end
-            
+
             % For k-space filling visualization
             obj.nsaSpace = avgSpace(:,:,:,:,1,:);
             fillkSpace = avgSpace./avgSpace;
@@ -2102,6 +2109,7 @@ classdef proudData
             nFA = app.NFAViewField.Value;       % Number of flip angles
             mtx = dimy*dimz*dimx;
 
+
             % For multiple flip-angles
             if nFA > 1
                 nRep = nFA;
@@ -2127,13 +2135,13 @@ classdef proudData
                 % Fill the ky and kz k-space locations
                 ky = round(obj.proudArray(1,:) + dimy/2 + 1);      % contains the y-coordinates of the custom k-space sequentially
                 kz = round(obj.proudArray(2,:) + dimz/2 + 1);      % contains the z-coordinates of the custom k-space sequentially
-                
+
                 % Some checks to keep k-space points within dimensions
                 ky(ky>dimy) = dimy;
                 ky(ky<1) = 1;
                 kz(kz>dimz) = dimz;
                 kz(kz<1) = 1;
-               
+
                 % Duplicate for multiple acquired repetitions
                 ky = repmat(ky,1,nRep+1);
                 kz = repmat(kz,1,nRep+1);
@@ -2146,7 +2154,7 @@ classdef proudData
 
                 % Trajectory counter
                 kcnt = 1;   % k-point counter
-      
+
                 % Loop over desired number of frames
                 for dynamic = 1:nDyn
 
@@ -2155,6 +2163,7 @@ classdef proudData
                     else
                         app.TextMessage(strcat('Sorting dynamic #',num2str(dynamic),' ...'));
                     end
+                    drawnow;
 
                     wStart = (dynamic - 1) * kLinesPerFrame + 1;      % Starting k-line for specific frame
                     wEnd = dynamic * kLinesPerFrame;                  % Ending k-line for specific frame
@@ -2178,7 +2187,7 @@ classdef proudData
 
                                 % Fill averages space
                                 avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
-                            
+
                             end
 
                             % Fill the k-space trajectory array
@@ -2199,9 +2208,9 @@ classdef proudData
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
                 obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
-                
+
                 % For multiple flip-angles
-                if nFA>1 
+                if nFA>1
                     obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
                 end
 
@@ -2230,11 +2239,13 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Remove navigator if present
         % ---------------------------------------------------------------------------------
-        function obj = chopNav(obj)
+        function obj = chopNav(obj,app)
 
             % Chop of the navigator if present
             if obj.slice_nav == 1
 
+                app.TextMessage('INFO: Removing navigator ...');
+                app.TextMessage('Use RETROSPECTIVE app for navigator analysis ...');
                 discard = obj.no_samples_discard + obj.no_samples_nav;
                 for i=1:obj.nrCoils
                     obj.rawKspace{i} = obj.rawKspace{i}(discard+1:end,:,:,:,:,:);
@@ -2242,6 +2253,8 @@ classdef proudData
                 obj.nsaSpace = obj.nsaSpace(discard+1:end,:,:,:,:,:);
                 obj.fillingSpace = obj.fillingSpace(discard+1:end,:,:,:,:,:);
                 obj.NO_SAMPLES = obj.NO_SAMPLES - discard;
+                app.XEditField.Value = obj.NO_SAMPLES;
+                app.KMatrixViewField1.Value = obj.NO_SAMPLES;
 
             end
 
@@ -2268,7 +2281,7 @@ classdef proudData
             for i = 1:obj.nrCoils
                 obj.rawKspace{i} = 16383*obj.rawKspace{i}/max(m);
             end
-            
+
             if ~obj.halfFourier_flag
 
                 switch obj.dataType
@@ -2426,31 +2439,28 @@ classdef proudData
             end
             imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
-            % Sum of squares reconstruction
-            imageTmp = abs(bart(app,'rss 24', imageTmp));
-
-            % Phase images
-            phaseImageReg = angle(imageTmp(:,:,:,:,1,:));
+            % Sum over coils
+            imageTmp = sum(imageTmp,[4,5]);
 
             % Rearrange to correct orientation: x, y, slices, dynamics, flip-angle, TE (cine)
             imageReg = permute(imageTmp,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
-            phaseImageReg = permute(phaseImageReg,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
             % Flip dimensions where needed
             if obj.PHASE_ORIENTATION == 1
                 imagesOut = flip(imageReg,2);
-                phaseImagesOut = flip(phaseImageReg,2);
             else
                 imagesOut = flip(flip(imageReg,2),1);
-                phaseImagesOut = flip(flip(phaseImageReg,2),1);
             end
 
             % Return the images object
-            for i = 1:dimd
-                for echo = 1:dimte
-                    obj.images(:,:,:,i,flipAngle,echo) = imagesOut(:,:,:,i,1,echo);
-                    obj.phaseImages(:,:,:,i,flipAngle,echo) = phaseImagesOut(:,:,:,i,1,echo);
-                    obj.phaseImagesOrig(:,:,:,i,flipAngle,echo) = phaseImagesOut(:,:,:,i,1,echo);
+            for slice = 1:size(imagesOut,3)
+                for dynamic = 1:size(imagesOut,4)
+                    for echoTime = 1:size(imagesOut,6)
+                        obj.complexImages(:,:,slice,dynamic,flipAngle,echoTime) = imagesOut(:,:,slice,dynamic,1,echoTime);
+                        obj.images(:,:,slice,dynamic,flipAngle,echoTime) = abs(imagesOut(:,:,slice,dynamic,1,echoTime));
+                        obj.phaseImages(:,:,slice,dynamic,flipAngle,echoTime) = angle(imagesOut(:,:,slice,dynamic,1,echoTime));
+                        obj.phaseImagesOrig(:,:,slice,dynamic,flipAngle,echoTime) = angle(imagesOut(:,:,slice,dynamic,1,echoTime));
+                    end
                 end
             end
 
@@ -2560,35 +2570,26 @@ classdef proudData
                 end
                 imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
-                % Sum of squares reconstruction
-                imageTmp = abs(bart(app,'rss 24', imageTmp));
-
-                % Modulus image
-                imageReg = abs(imageTmp);
-
-                % Phase image
-                phaseImageReg = angle(imageTmp);
+                % Sum over coils
+                imageTmp = sum(imageTmp,[4,5]);
 
                 % Rearrange to correct orientation: x, y, slices, dynamics,
-                imageReg = reshape(imageReg,[dimy,dimx,dimd,dimz]);
-                phaseImageReg = reshape(phaseImageReg,[dimy,dimx,dimd,dimz]);
+                imageReg = reshape(imageTmp,[dimy,dimx,dimd,dimz]);
 
                 imagesOut = permute(imageReg,[2,1,4,3]);
-                phaseImagesOut = permute(phaseImageReg,[2,1,4,3]);
 
                 % Flip dimensions where needed
                 if obj.PHASE_ORIENTATION == 1
                     imagesOut = flip(imagesOut,2);
-                    phaseImagesOut = flip(phaseImagesOut,2);
                 else
                     imagesOut = flip(flip(imagesOut,2),1);
-                    phaseImagesOut = flip(flip(phaseImagesOut,2),1);
                 end
 
                 % Return the images object
-                obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
+                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
+                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
+                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
+                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
 
             else
 
@@ -2715,11 +2716,9 @@ classdef proudData
 
                     % Output reconstructed image
                     if dimd == 1
-                        imagesOut(:,:,slice,:) = abs(imageTmp(:,:,1));
-                        phaseImagesOut(:,:,slice,:) = angle(imageTmp(:,:,1));
+                        imagesOut(:,:,slice,:) = imageTmp(:,:,1);
                     else
-                        imagesOut(:,:,slice,:) = abs(imageTmp);
-                        phaseImagesOut(:,:,slice,:) = angle(imageTmp);
+                        imagesOut(:,:,slice,:) = imageTmp;
                     end
 
                 end
@@ -2727,19 +2726,18 @@ classdef proudData
                 % Flip dimensions if required
                 if obj.PHASE_ORIENTATION == 1
                     imagesOut = flip(imagesOut,1);
-                    phaseImagesOut = flip(phaseImagesOut,1);
                 end
 
                 % There seems to be a 1 pixel shift with this reco, correct for this:
                 imagesOut = circshift(imagesOut,-1,2);
                 imagesOut = circshift(imagesOut,1,1);
-                phaseImagesOut = circshift(phaseImagesOut,-1,2);
-                phaseImagesOut = circshift(phaseImagesOut,1,1);
 
                 % Return the images object
-                obj.images(:,:,:,:,flipAngle,echoTime) = imagesOut;
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesOut;
+                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
+                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
+                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
+                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
+
 
             end
 
@@ -2750,7 +2748,7 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Image reconstruction: FFT 2D 
+        % Image reconstruction: FFT 2D
         % Version February 2023
         % ---------------------------------------------------------------------------------
         function obj = fftReco2D(obj,app,flipAngle,echoTime)
@@ -2788,7 +2786,7 @@ classdef proudData
 
             % Kspace data x,y,NR,slices,coils
             kSpace = zeros(dimx,dimy,ndimd,ndimz,dimc);
-       
+
             if app.AutoSensitivityCheckBox.Value == 1
                 for i = 1:dimc
                     kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
@@ -2857,12 +2855,12 @@ classdef proudData
 
                         % Back to image space
                         image2D = obj.ifft2Dmri(kdatai);
-             
+
                     end
 
                     % Return the image
                     imagesOut(:,:,slice,dynamic,:) = image2D;
-           
+
                 end
 
             end
@@ -2874,10 +2872,14 @@ classdef proudData
                 imagesOut = flip(flip(imagesOut,2),1);
             end
 
+            % Sum over coils
+            imagesOut = sum(imagesOut,5);
+
             % Return the images object
-            obj.images(:,:,:,:,flipAngle,echoTime) = abs(rssq(imagesOut,5));
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = mean(angle(imagesOut),5);
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = mean(angle(imagesOut),5);
+            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
+            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
 
         end %fftReco2D
 
@@ -2948,7 +2950,7 @@ classdef proudData
                 % 	LEVEL_DIM,      13
                 % 	SLICE_DIM,      14  slices
                 % 	AVG_DIM,        15
- 
+
                 %         BART index          0  1  2  3  4  5  6  7  8  9  10 11 12 13
                 %         Matlab index        1  2  3  4  5  6  7  8  9  10 11 12 13 14
                 kSpacePics = permute(kSpace,[3 ,2 ,1 ,8 ,5 ,6 ,9 ,10,11,12, 4 13 14 7 ]);
@@ -2992,27 +2994,18 @@ classdef proudData
                 end
                 imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
 
-                % Sum of squares
-                imagesTmp = abs(bart(app,'rss 24', imagesTmp));
-
-                % Modulus and phase image
-                imagesReg = abs(imagesTmp);
-                phaseImagesReg = angle(imagesTmp);
+                % coil sum
+                imagesReg = sum(imagesTmp,[4,5]);
 
                 % Rearrange to correct orientation: x, y, z, dynamics, slab
                 imagesReg = reshape(imagesReg,[dimz,dimy,dimx,dimd,dims]);
                 imageSlab = permute(imagesReg,[3,2,1,4,5]);
-            
-                phaseImagesReg = reshape(phaseImagesReg,[dimz,dimy,dimx,dimd,dims]);
-                phaseImageSlab = permute(phaseImagesReg,[3,2,1,4,5]);
 
                 % Flip dimensions to correct orientation
                 if obj.PHASE_ORIENTATION == 1
                     imageSlab = flip(flip(imageSlab,3),2);
-                    phaseImageSlab = flip(flip(phaseImageSlab,3),2);
                 else
                     imageSlab = flip(flip(flip(imageSlab,3),2),1);
-                    phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
                 end
 
                 % Slab ratio + discard
@@ -3021,26 +3014,23 @@ classdef proudData
                     if nrDiscard>0
                         imageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
                         imageSlab(:,:,1:nrDiscard,:,:) = [];
-                        phaseImageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
-                        phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
                     end
                 end
 
                 % Concatenate multislab data
                 imageMultiSlab = imageSlab(:,:,:,:,1);
-                phaseImageMultiSlab = phaseImageSlab(:,:,:,:,1);
 
                 if dims>1
                     for i = 2:dims
                         imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
-                        phaseImageMultiSlab = cat(3,phaseImageMultiSlab,phaseImageSlab(:,:,:,:,i));
                     end
                 end
 
-                % Return the image object
-                obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlab;
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlab;
+                % Return the image objects
+                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlab;
+                obj.images(:,:,:,:,flipAngle,echoTime)  = abs(imageMultiSlab);
+                obj.phaseImages(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlab);
+                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlab);
 
             else
 
@@ -3049,7 +3039,7 @@ classdef proudData
                 app.TextMessage('WARNING: Bart toolbox not available, slow reconstruction ...');
 
                 % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
-                %                    1 2 3    4     5 6   7  
+                %                    1 2 3    4     5 6   7
                 dimx = size(kSpaceRaw{1},1);
                 dimy = size(kSpaceRaw{1},2);
                 dimz = size(kSpaceRaw{1},3);
@@ -3060,10 +3050,9 @@ classdef proudData
                 ndimy = app.YEditField.Value;
                 ndimz = app.ZEditField.Value;
                 param.iteration = 0;
-                    
+
                 % Preallocate
                 imageSlab = zeros(ndimx,ndimy,ndimz,dimd,dims);
-                phaseImageSlab = zeros(ndimx,ndimy,ndimz,dimd,dims);
 
                 for slab = 1:dims
 
@@ -3157,7 +3146,7 @@ classdef proudData
                     param.nite = 5;  %10
                     param.nouter = 1;  %2
                     param.totaliterations = param.nouter * param.nite * dims;
-                   
+
                     % Linear reconstruction
                     kdata1 = randn(size(kdatai))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
                     recon_dft = param.E'*kdata1;
@@ -3171,17 +3160,14 @@ classdef proudData
 
                     % Output reconstructed image
                     if dimd == 1
-                        imageOut = abs(imageTmp(:,:,:,1));
-                        phaseImageOut = angle(imageTmp(:,:,:,1));
+                        imageOut = imageTmp(:,:,:,1);
                     else
-                        imageOut = abs(imageTmp(:,:,:,:));
-                        phaseImageOut = angle(imageTmp(:,:,:,:));
+                        imageOut = imageTmp(:,:,:,:);
                     end
 
                     % Flip dimensions to correct orientation
                     if obj.PHASE_ORIENTATION == 1
                         imageOut = flip(imageOut,1);
-                        phaseImageOut = flip(phaseImageOut,1);
                     end
 
                     % Images are shifted by 1 pixel in each dimension,
@@ -3189,13 +3175,9 @@ classdef proudData
                     imageOut = circshift(imageOut,1,1);
                     imageOut = circshift(imageOut,-1,2);
                     imageOut = circshift(imageOut,1,3);
-                    phaseImageOut = circshift(phaseImageOut,1,1);
-                    phaseImageOut = circshift(phaseImageOut,-1,2);
-                    phaseImageOut = circshift(phaseImageOut,1,3);
 
                     % Return the images object
                     imageSlab(:,:,:,:,slab) = imageOut;
-                    phaseImageSlab(:,:,:,:,slab) = phaseImageOut;
 
                 end
 
@@ -3214,30 +3196,22 @@ classdef proudData
 
                     imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
                     imageSlab(:,:,1:nrDiscard,:,:) = [];
-                    phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                    phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
                     avgSlab = ones(size(imageSlab));
 
                     % Resulting image size + 2 * overlap on the image borders
                     dimzs = size(imageSlab,3);
                     totaldimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
 
-                    imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
-                    phaseImageMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
-                    avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,ndimd);
+                    imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,dimd);
+                    avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,dimd);
 
                     % Concatenate the overlapping matrices
                     z1 = 1;
                     for i = 1:dims
-
                         z2 = z1 + dimzs;
-
                         imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
-                        phaseImageMultiSlab(:,:,z1:z2-1,:) = phaseImageMultiSlab(:,:,z1:z2-1,:) + phaseImageSlab(:,:,:,:,i);
                         avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
-
                         z1 = z2 - 2*overlap;
-
                     end
 
                     % Average the overlap
@@ -3245,21 +3219,19 @@ classdef proudData
 
                     % Remove the overlap on the multi-slab beginning and end
                     imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
-                    phaseImageMultiSlabOutput = phaseImageMultiSlab(:,:,overlap+1:end-overlap,:);
-
 
                 else
 
                     % Only 1 image slab
                     imageMultiSlabOutput = imageSlab(:,:,:,:,1);
-                    phaseImageMultiSlabOutput = phaseImageSlab(:,:,:,:,1);
 
                 end
 
-                % Return the image object
-                obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
+                % Return the image objects
+                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
+                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
+                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageMultiSlabOutput);
+                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlabOutput);
 
             end
 
@@ -3364,15 +3336,8 @@ classdef proudData
                         imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kDatai(:,:,:,coil)));
                     end
 
-                    % Root sum of squares
-                    image3D = rssq(imageIm,4);
-
-                    % Phase images (mean of coils)
-                    image3Dphase = mean(angle(imageIm),4);
-                
                     % Return the image
-                    imageSlab(:,:,:,dynamic,slab) = image3D;
-                    phaseImageSlab(:,:,:,dynamic,slab) = image3Dphase;
+                    imageSlab(:,:,:,dynamic,slab) = imageIm;
 
                 end
 
@@ -3381,17 +3346,15 @@ classdef proudData
             % Flip dimensions to correct orientation
             if obj.PHASE_ORIENTATION == 1
                 imageSlab = flip(flip(imageSlab,3),2);
-                phaseImageSlab = flip(flip(phaseImageSlab,3),2);
             else
                 imageSlab = flip(flip(flip(imageSlab,3),2),1);
-                phaseImageSlab = flip(flip(flip(phaseImageSlab,3),2),1);
             end
 
             % Combine slabs with overlap if present
             if dims > 1
 
                 nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
-                
+
                 overlap = app.SlabOverlapEditField.Value;
                 if overlap > nrDiscard
                     overlap = nrDiscard;
@@ -3402,26 +3365,22 @@ classdef proudData
 
                 imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
                 imageSlab(:,:,1:nrDiscard,:,:) = [];
-                phaseImageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                phaseImageSlab(:,:,1:nrDiscard,:,:) = [];
                 avgSlab = ones(size(imageSlab));
-                
+
                 % Resulting image size + 2 * overlap on the image borders
                 dimzs = size(imageSlab,3);
                 totalDimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
 
                 imageMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
-                phaseImageMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
                 avgMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
-    
+
                 % Concatenate the overlapping matrices
                 z1 = 1;
                 for i = 1:dims
-                    
+
                     z2 = z1 + dimzs;
-                    
+
                     imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
-                    phaseImageMultiSlab(:,:,z1:z2-1,:) = phaseImageMultiSlab(:,:,z1:z2-1,:) + phaseImageSlab(:,:,:,:,i);
                     avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
 
                     z1 = z2 - 2*overlap;
@@ -3433,21 +3392,20 @@ classdef proudData
 
                 % Remove the overlap on the multi-slab beginning and end
                 imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
-                phaseImageMultiSlabOutput = phaseImageMultiSlab(:,:,overlap+1:end-overlap,:);
 
 
             else
 
                 % Only 1 image slab
                 imageMultiSlabOutput = imageSlab(:,:,:,:,1);
-                phaseImageMultiSlabOutput = phaseImageSlab(:,:,:,:,1);
-            
+
             end
 
-            % Return the image object
-            obj.images(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImageMultiSlabOutput;
+            % Return the image objects
+            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
+            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageMultiSlabOutput);
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlabOutput);
 
         end % fftReco3D
 
@@ -3466,7 +3424,7 @@ classdef proudData
             TVd = app.TVtimeEditField.Value;
             dimc = obj.nrCoils;
 
-            % Original kx, ky, slices, dynamics  (X, Y, Z, NR, NFA, NE) 
+            % Original kx, ky, slices, dynamics  (X, Y, Z, NR, NFA, NE)
             kSpaceRaw = cell(dimc);
             for i=1:dimc
                 kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
@@ -3502,13 +3460,13 @@ classdef proudData
             end
 
             % Apply Tukey filter (again, after shift)
-            filterWidth = 0.25;
+            filterWidth = 0.1;
             tmpFilter = tukeywin(dimx,filterWidth);
             for coil = 1:dimc
                 tukeyFilter(:,1,1,1) = tmpFilter;
                 kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
             end
-        
+
             % Requested sizes
             dimx = app.XEditField.Value;
             dimy = size(obj.rawKspace{1},2); % original value for now, later interpolated
@@ -3599,7 +3557,7 @@ classdef proudData
                         dTotal = [];
 
                         delaysBart = bart(app,'estdelay -r4 ',trajPicsSum,kSpacePicsSum);
-                        
+
                         % Remove unkown warning
                         ff = strfind(delaysBart,"[0m");
                         if ~isempty(ff)
@@ -3609,7 +3567,7 @@ classdef proudData
                         end
 
                         delaysBart = strrep(delaysBart,':',',');
-                        dTotal = str2num(delaysBart); 
+                        dTotal = str2num(delaysBart);
                         dTotal(1) = - dTotal(1); % It seems this correction should be the inverted
 
                     catch ME
@@ -3621,7 +3579,7 @@ classdef proudData
                         app.RingMethodCheckBox.Value = false;
                         dTotal = zeros(3,1);
 
-                    end 
+                    end
 
                     % Sent gradient delay vector back to app
                     if ~isempty(dTotal)
@@ -3764,7 +3722,7 @@ classdef proudData
                         app.GxDelayEditField.Value = double(dTotal(1));
                         app.GyDelayEditField.Value = double(dTotal(2));
                         app.GzDelayEditField.Value = double(dTotal(3));
-                        
+
                     end
 
                 end
@@ -3781,7 +3739,7 @@ classdef proudData
             trajPics = ipermute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
 
             % Sensitivity maps
-            if dimc > 1 
+            if dimc > 1
                 kSpacePicsSum = sum(kSpacePics,[11,12]);
                 trajPicsSum = sum(trajPics,[11,12]);
                 ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
@@ -3836,7 +3794,7 @@ classdef proudData
             end
 
             % Root sum of squares over all coils
-            recoImage = bart(app,'rss 16', igrid);
+            recoImage = sum(igrid,[4,5]);
 
             % Interpolate to desired dimy if necessary
             if dimy ~= size(igrid,3)
@@ -3845,7 +3803,7 @@ classdef proudData
                 fiGrid = bart(app,['resize -c 1 ',num2str(dimy)],fiGrid);
                 igrid = bart(app,'fft -i 2',fiGrid);
             end
-     
+
             % Rearrange to orientation: x, y, slices, dynamics
             imageOut = permute(igrid,[1, 2, 14, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
 
@@ -3854,24 +3812,11 @@ classdef proudData
                 imageOut = flip(flip(imageOut,2),1);
             end
 
-            % Get the in-plane image shift
-            obj = obj.get2DimageShift(imageOut, app);
-
-            % Apply the shift on sub-pixel level
-            for dyn = 1:size(imageOut,4)
-                for slice = 1:size(imageOut,3)
-                    imageOut(:,:,slice,dyn) = proudData.image2Dshift(squeeze(imageOut(:,:,slice,dyn)),obj.yShift,obj.xShift);
-                end
-            end
-
-            % Absolute value and phase image
-            imagesReg = abs(imageOut);
-            phaseImagesReg = angle(imageOut);
-
             % Return the image objects
-            obj.images(:,:,:,:,flipAngle,echoTime) = imagesReg;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
+            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
+            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
 
         end % csRecoRadial
 
@@ -3931,7 +3876,7 @@ classdef proudData
                 tukeyFilter(:,1,1,1) = tmpFilter;
                 kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
             end
-        
+
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
             fullAngle = 180;
@@ -3962,21 +3907,21 @@ classdef proudData
             app.RecoProgressGauge.Value = 0;
 
             cnt = 1;
-            
+
             for slice = 1:dimz
 
                 for dynamic = 1:dimd
 
                     % NOTE: coils can be incorporated in the NUFFT, need data first
                     for coil = 1:obj.nrCoils
-                        
+
                         objn = nufft_3d(traj,dimx,app);
 
                         data = kSpaceRaw{coil}(:,:,slice,dynamic);
                         data = data(:);
 
                         reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
-                      
+
                         reco = imresize(reco,[ndimy ndimx]);
 
                         image(:,:,slice,dynamic,coil) = reco;
@@ -3990,34 +3935,21 @@ classdef proudData
 
                 end
 
-            end         
+            end
 
-            % Root sum of squares coil dimension
-            imageOut = rssq(image,5);
+            % Sum of coil dimension
+            imageOut = sum(image,5);
 
             % Flip for phase-orientation is vertical
             if obj.PHASE_ORIENTATION == 0
                 imageOut = flip(flip(imageOut,2),1);
             end
 
-             % Get the in-plane image shift
-            obj = obj.get2DimageShift(imageOut, app);
-
-            % Apply the shift on sub-pixel level
-            for dyn = 1:size(imageOut,4)
-                for slice = 1:size(imageOut,3)
-                    imageOut(:,:,slice,dyn) = proudData.image2Dshift(squeeze(imageOut(:,:,slice,dyn)),obj.yShift,obj.xShift);
-                end
-            end
-
-            % Absolute value and phase image
-            imagesReg = abs(imageOut);
-            phaseImagesReg = angle(imageOut);
-
             % Return the image objects
-            obj.images(:,:,:,:,flipAngle,echoTime) = imagesReg;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
+            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
+            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
+            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
+            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
 
         end % Reco2DRadialNUFFT
 
@@ -4036,7 +3968,7 @@ classdef proudData
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
             dimc = obj.nrCoils;
-            obj.totalVariation = 'T'; % Use total variation, instead of TGV 
+            obj.totalVariation = 'T'; % Use total variation, instead of TGV
 
             % Original kx(readout), ky(spokes), 1, dynamics, flip-angle, echo-time
             kSpaceRaw = cell(dimc);
@@ -4088,7 +4020,7 @@ classdef proudData
             end
             averages = bart(app,['resize -c 3 ',num2str(dimd)],averages);
             traj = bart(app,['resize -c 3 ',num2str(dimd)],traj);
- 
+
             % Auto shift to maximum intensity at first data point
             if app.CenterEchoCheckBox.Value
                 interpFactor = 16;
@@ -4168,7 +4100,7 @@ classdef proudData
             calibSize = [kdim, kdim, kdim];
             cSize = ['-d',num2str(calibSize(1)),':',num2str(calibSize(2)),':',num2str(calibSize(3))];
             app.TextMessage(strcat('Calibration size = ',{' '},num2str(kdim)));
-     
+
             % Gradient delay calibration
             if app.GradDelayCalibrationCheckBox.Value
 
@@ -4353,8 +4285,8 @@ classdef proudData
                 igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
             end
 
-            % Root sum of squares over all coils
-            recoImage = bart(app,'rss 16', igrid);
+            % Sum over coils
+            recoImage = sum(igrid,[4,5]);
 
             % Interpolate to desired dimensions if requested
             ndimx = app.XEditField.Value;
@@ -4367,23 +4299,18 @@ classdef proudData
                 recoImage = bart(app,'fft -i 7',fiGrid);
             end
 
-            % Absolute value and phase image
-            imagesReg = abs(recoImage);
-            phaseImagesReg = angle(recoImage);
-
             % Flip dimensions to correct orientation
             if obj.PHASE_ORIENTATION == 1
-                imagesReg = flip(imagesReg,3);
-                phaseImagesReg = flip(phaseImagesReg,3);
+                imageOut = flip(recoImage,3);
             else
-                imagesReg = flip(flip(imagesReg,3),1);
-                phaseImagesReg = flip(flip(phaseImagesReg,3),1);
+                imageOut = flip(flip(recoImage,3),1);
             end
 
             % Return the image objects
-            obj.images(:,:,:,:,flipAngle,echoTime) = imagesReg;
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = phaseImagesReg;
+            obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
+            obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
+            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
+            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
 
         end % Reco3DuteCS
 
@@ -4479,11 +4406,8 @@ classdef proudData
             for coil = 1:obj.nrCoils
 
                 objn = nufft_3d(traj,dims,app);
-
                 data = kSpace{coil}(:);
-
                 reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
-
                 image(:,:,:,coil) = reco;
 
                 app.RecoProgressGauge.Value = round(100*cnt/loops);
@@ -4494,7 +4418,8 @@ classdef proudData
             end
 
             % Root sum of squares coil dimension
-            imageOut = rssq(image,4);
+            %imageOut = rssq(image,4);
+            imageOut = sum(image,4);
 
             % Flip dimensions to correct orientation
             if obj.PHASE_ORIENTATION == 1
@@ -4503,14 +4428,11 @@ classdef proudData
                 imageOut = flip(flip(imageOut,3),1);
             end
 
-            % Absolute value and phase image
-            imagesReg = abs(imageOut);
-            phaseImagesReg = angle(imageOut);
-
             % Return the image objects
-            obj.images(:,:,:,1,flipAngle,echoTime) = imagesReg;
-            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
-            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = phaseImagesReg;
+            obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
+            obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
+            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
+            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
 
             % At this moment the datasize will be that of the original data
             app.XEditField.Value = size(obj.images,1);
@@ -4553,7 +4475,7 @@ classdef proudData
                     if window(2) > size(im,2)/2
                         window(2) = round(size(im,2)/2);
                     end
-                 
+
                     % Loop over all slices, dynamics, flip angles, echo times
                     % Choose 2-dim image + extra dimension
                     if nTE > 1
@@ -4644,7 +4566,7 @@ classdef proudData
             end
 
         end % unRing
-        
+
 
 
 
@@ -4711,10 +4633,10 @@ classdef proudData
 
                     % Shift image to prevent pixel-shift after FFT
                     if obj.PHASE_ORIENTATION == 1
-                        im = circshift(im,1,2); 
+                        im = circshift(im,1,2);
                     else
-                        im = circshift(im,1,1); 
-                        im = circshift(im,1,2); 
+                        im = circshift(im,1,1);
+                        im = circshift(im,1,2);
                     end
 
                     kSpace = zeros(size(im));
@@ -4733,7 +4655,7 @@ classdef proudData
                     if obj.PHASE_ORIENTATION == 1
                         kSpace = flip(kSpace,1);
                     end
-                   
+
                     % Return the object
                     obj.mrdKspace = kSpace;
 
@@ -4744,11 +4666,11 @@ classdef proudData
 
                     % Shift image to prevent pixel-shift after FFT
                     if obj.PHASE_ORIENTATION == 1
-                        im = circshift(im,1,2); 
-                        im = circshift(im,1,3); 
+                        im = circshift(im,1,2);
+                        im = circshift(im,1,3);
                     else
-                        im = circshift(im,1,1); 
-                        im = circshift(im,1,2); 
+                        im = circshift(im,1,1);
+                        im = circshift(im,1,2);
                         im = circshift(im,1,3);
                     end
 
@@ -4768,7 +4690,7 @@ classdef proudData
                     else
                         kSpace = flip(kSpace,3);
                     end
-             
+
                     % Return the object
                     obj.mrdKspace = kSpace;
 
@@ -4784,7 +4706,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = recoSurFiles(obj, surpath, suffix, mrdfilename, rprfilename)
 
-           % SUR file names
+            % SUR file names
             surfiles = [surpath, suffix, '_00###.SUR'];
 
             % Link with the server
@@ -4904,7 +4826,7 @@ classdef proudData
 
             % Message
             app.TextMessage('Phase unwrapping ...');
-            
+
             % Phase unwrapping
             if size(sol,3) > 1
                 for v = 1:size(sol,5)
@@ -5022,46 +4944,126 @@ classdef proudData
         end
 
 
-
         % ---------------------------------------------------------------------------------
-        % Retrieve the 2D image shift for off-center and oblique Radial sequence
+        % Retrieve the 3D image shift for off-center and oblique Radial and P2ROUD sequences
         % ---------------------------------------------------------------------------------
-        function obj = get2DimageShift(obj, image, app)
+        function objData = get3DimageShift(objData, image, app)
 
-            % Image dimensions in pixels
-            dimx = size(image,1);
-            dimy = size(image,2);
-     
+            % Image dimensions in pixels  (x,y,z,nr,fa,ne)
+            dx = size(image,1);
+            dy = size(image,2);
+            dz = size(image,3);
+
             % Calculate the shift
-            for i = 1:length(obj.fov_read_off)
-                relShiftX = dimx*obj.fov_read_off(i)/4000;
-                relShiftY = dimy*obj.fov_phase_off(i)/4000;
-            end
-       
-            % Different readout / phase depending on phase_orientation value
-            if obj.PHASE_ORIENTATION
+            relShiftX = dx*objData.fov_read_off/4000;      % Relative offset, scaling from PPL file
+            relShiftY = dy*objData.fov_phase_off/4000;
+            relShiftZ = dz*objData.fov_slice_off/400;
 
-                shiftInX =  relShiftX; 
-                shiftInY =  -relShiftY; 
+            % Different readout / phase depending on phase_orientation value
+            if objData.PHASE_ORIENTATION
+
+                shiftInX = +relShiftX;
+                shiftInY = -relShiftY;
+                shiftInZ = -relShiftZ;
 
             else
 
-                shiftInX =   -relShiftX; 
-                shiftInY =   -relShiftY; 
+                shiftInX = -relShiftX;
+                shiftInY = -relShiftY;
+                shiftInZ = -relShiftZ;
 
             end
 
             % Report the values back / return the object
-            obj.xShift = shiftInX;
-            obj.yShift = shiftInY;
+            objData.xShift = shiftInX;
+            objData.yShift = shiftInY;
+            objData.zShift = shiftInZ;
 
-            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels ...',shiftInX(1),shiftInY(1)));
+            % Readout shift already taken care of in PPL sequence
+            if strcmp(objData.trajType,'P2ROUD')
+                objData.xShift = 0;
+            end
 
-        end % get2DimageShift
+            % Textmessage
+            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels, ΔZ = %.2f pixels ...',objData.xShift(1),objData.yShift(1),objData.zShift(1)));
+
+        end % get3DimageShift
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Apply sub-pixel 2D image shift (2D radial)
+        % ---------------------------------------------------------------------------------
+        function objData = shiftImages2D(objData,app)
+
+            % Retrieve the in-plane image shifts
+            objData = objData.get3DimageShift(objData.images, app);
+
+            % Apply the shift on sub-pixel level to the complex images
+            for echo = 1:size(objData.images,6)
+                for flipAngle = 1:size(objData.images,5)
+                    for dynamic = 1:size(objData.images,4)
+                        for slice = 1:size(objData.images,3)
+                            objData.complexImages(:,:,slice,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(:,:,slice,dynamic,flipAngle,echo)),objData.yShift(slice),objData.xShift(slice));
+                        end
+                    end
+                end
+            end
+
+            % Calculate mangitude and phase images
+            objData.images = abs(objData.complexImages);
+            objData.phaseImages = angle(objData.complexImages);
+            objData.phaseImagesOrig = angle(objData.complexImages);
+
+        end % shiftImages2D
+
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Apply sub-pixel 3D image shift (3D P2ROUD trajectory)
+        % ---------------------------------------------------------------------------------
+        function objData= shiftImages3D(objData,app)
+
+            % Retrieve the in-plane image shifts
+            objData = objData.get3DimageShift(objData.images, app);
+
+            % Apply the shift on sub-pixel level to the complex images
+            for echo = 1:size(objData.images,6)
+                for flipAngle = 1:size(objData.images,5)
+                    for dynamic = 1:size(objData.images,4)
+                        for slice = 1:size(objData.images,3)
+                            objData.complexImages(:,:,slice,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(:,:,slice,dynamic,flipAngle,echo)),objData.yShift(1),objData.xShift(1));
+                        end
+                    end
+                end
+            end
+
+            for echo = 1:size(objData.images,6)
+                for flipAngle = 1:size(objData.images,5)
+                    for dynamic = 1:size(objData.images,4)
+                        for readout = 1:size(objData.images,1)
+                            objData.complexImages(readout,:,:,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(readout,:,:,dynamic,flipAngle,echo)),objData.zShift(1),0);
+                        end
+                    end
+                end
+            end
+
+            % Calculate mangitude and phase images
+            objData.images = abs(objData.complexImages);
+            objData.phaseImages = angle(objData.complexImages);
+            objData.phaseImagesOrig = angle(objData.complexImages);
+
+        end % shiftImages3D
+
+
 
 
 
     end % Public methods
+
+
+
 
 
 
@@ -5210,9 +5212,9 @@ classdef proudData
             dim6 = val(2);
             fseek(fid,256,'bof');
             text = fread(fid,256);
-            no_samples = xdim;  
-            no_views = ydim;    
-            no_views_2 = zdim;  
+            no_samples = xdim;
+            no_views = ydim;
+            no_views_2 = zdim;
             no_slices = dim4;
             no_echoes = dim5;
             no_expts = dim6;
@@ -5229,21 +5231,21 @@ classdef proudData
             end
             switch onlyDataType
                 case '0'
-                    dataFormat = 'uchar';   
+                    dataFormat = 'uchar';
                 case '1'
-                    dataFormat = 'schar';   
+                    dataFormat = 'schar';
                 case '2'
-                    dataFormat = 'short';   
+                    dataFormat = 'short';
                 case '3'
-                    dataFormat = 'int16';   
+                    dataFormat = 'int16';
                 case '4'
-                    dataFormat = 'int32';   
+                    dataFormat = 'int32';
                 case '5'
-                    dataFormat = 'float32'; 
+                    dataFormat = 'float32';
                 case '6'
-                    dataFormat = 'double';  
+                    dataFormat = 'double';
                 otherwise
-                    dataFormat = 'int32';   
+                    dataFormat = 'int32';
             end
 
             % Try to read the expected amount of data at once
@@ -5254,21 +5256,21 @@ classdef proudData
             % If not, this means that the acquisition was prematurely stopped
             % and only part of the data is available
             if count < num2Read
-    
+
                 % Find the end of the data by looking for :PPL string
                 textData = fileread(filename);
                 targetText = ":PPL";
                 amountOfData = strfind(textData,targetText);
 
                 % Number of floats to read
-                newNum2Read = (amountOfData-4)/4 - 512;    
+                newNum2Read = (amountOfData-4)/4 - 512;
 
                 % Reset the file position indicator to beginning of the data
                 fseek(fid,512,'bof');
 
                 % Read the data again
                 [m_total, count] = fread(fid,newNum2Read ,dataFormat);
-        
+
             end
 
             if isComplex == 2
@@ -5307,10 +5309,10 @@ classdef proudData
                     ord2(2*g)=no_views_2/2-g+1;
                 end
             end
-            
+
             % pre-allocate the data matrix
             m_C_1=zeros(no_expts,no_echoes,no_slices,max(ord(:)),max(ord2(:)),no_samples);
-           
+
             n=0;
             for a=1:no_expts
                 for b=1:no_echoes
@@ -5373,7 +5375,7 @@ classdef proudData
                             C = textscan(char1, '%*s %s %f');
                             field_title = char(C{1}); field_title(numel(field_title)) = [];
                             numeric_field = C{2};
-                            par = setfield(par, field_title, numeric_field); %#ok<*SFLD> 
+                            par = setfield(par, field_title, numeric_field); %#ok<*SFLD>
                         elseif find(PPR_type_1==num)
                             C = textscan(char1, '%*s %f');
                             numeric_field = C{1};
@@ -5384,12 +5386,12 @@ classdef proudData
                             par = setfield(par, field_, numeric_field);
                         elseif find(PPR_type_4==num)
                             C = textscan(char1, '%*s %s %n %n %s');
-                            field_title = char(C{1}); field_title(numel(field_title)) = []; %#ok<*NASGU> 
+                            field_title = char(C{1}); field_title(numel(field_title)) = []; %#ok<*NASGU>
                             numeric_field = C{2};
                             par = setfield(par, field_, numeric_field);
                         elseif find(PPR_type_0==num)
                             C = textscan(char1, '%*s %[^\n]');
-                            text_field = char(C{1}); 
+                            text_field = char(C{1});
                             par = setfield(par, field_, text_field);
                         elseif  find(PPR_type_5==num)
                             C = textscan(char1, '%*s %s %f %c %f');
@@ -5410,7 +5412,7 @@ classdef proudData
                             while (~contains(tline, pattern))
                                 tline = char(cell_text{1}(j+k,:));
                                 arr = textscan(tline, '%*s %f', num_elements);
-                                multiplier = [multiplier, arr{1}']; %#ok<*AGROW> 
+                                multiplier = [multiplier, arr{1}']; %#ok<*AGROW>
                                 k = k+1;
                                 tline = char(cell_text{1}(j+k,:));
                             end
@@ -5489,7 +5491,7 @@ classdef proudData
                         % Check if parameter values are in a matrix and read the next line
                         if paramvalue(1) == '('
                             paramvaluesize = str2num(fliplr(strtok(fliplr(strtok(paramvalue,')')),'(')));
-                            
+
                             % Create an empty matrix with size 'paramvaluesize' check if only one dimension
                             if ~isempty(paramvaluesize)
 
@@ -5538,7 +5540,7 @@ classdef proudData
                                 end
 
                             else
-                                paramvalue='';
+                                paramvalue = '';
                             end
 
                         end
@@ -5673,9 +5675,9 @@ classdef proudData
             dydty(isnan(dydty)) = 0;
 
         end % partialDerivative2D
-        
-        
-        
+
+
+
         % ---------------------------------------------------------------------------------
         % Low rank threshold 3D
         % ---------------------------------------------------------------------------------
@@ -5749,22 +5751,22 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
-        % Trajectory interpolation 
+        % Trajectory interpolation
         % ---------------------------------------------------------------------------------
         function kSpaceNew = trajInterpolation(kSpaceOld,dShift)
 
             kSpaceNew = zeros(size(kSpaceOld));
 
             % Loop over many dimensions
-            for idx7 = 1:size(kSpaceOld,7) 
+            for idx7 = 1:size(kSpaceOld,7)
 
-                for idx6 = 1:size(kSpaceOld,6) 
+                for idx6 = 1:size(kSpaceOld,6)
 
                     for idx5 = 1:size(kSpaceOld,5)
 
-                        for idx4 = 1:size(kSpaceOld,4) 
+                        for idx4 = 1:size(kSpaceOld,4)
 
-                            for idx3 = 1:size(kSpaceOld,3) 
+                            for idx3 = 1:size(kSpaceOld,3)
 
                                 kx = interp1((1:size(kSpaceOld,2))+dShift(1),kSpaceOld(1,:,idx3,idx4,idx5,idx6,idx7),1:size(kSpaceOld,2),'linear'); % Kx
                                 ky = interp1((1:size(kSpaceOld,2))+dShift(2),kSpaceOld(2,:,idx3,idx4,idx5,idx6,idx7),1:size(kSpaceOld,2),'linear'); % Ky
@@ -5840,7 +5842,7 @@ classdef proudData
 
         end % im2row3D
 
-                
+
 
         % ---------------------------------------------------------------------------------
         % image to rows 2D
@@ -5885,7 +5887,7 @@ classdef proudData
         % rows to image 3D
         % ---------------------------------------------------------------------------------
         function [res,W] = row2im3D(mtx, imSize, winSize)
-            
+
             % This function reconstructs an image from a matrix of overlapping patches.
             % It operates in 3D, allowing for multi-coil MRI data.
             %
@@ -5925,7 +5927,7 @@ classdef proudData
         % rows to image 2D
         % ---------------------------------------------------------------------------------
         function [res,W] = row2im2D(mtx,imSize, winSize)
-            
+
             % This function reshapes a 3D matrix of row vectors into a 2D image of size imSize,
             % using a sliding window of size winSize to combine the rows.
             %
@@ -6004,7 +6006,7 @@ classdef proudData
         end
 
 
-       
+
         % ---------------------------------------------------------------------------------
         % FFT 2D
         % ---------------------------------------------------------------------------------
@@ -6012,7 +6014,7 @@ classdef proudData
 
             X = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
             X = fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
-        
+
         end % FFT 2D
 
 
@@ -6024,7 +6026,7 @@ classdef proudData
 
             x = fftshift(fft(fftshift(X,1),[],1),1)/sqrt(size(X,1));
             x = fftshift(fft(fftshift(x,2),[],2),2)/sqrt(size(X,2));
-   
+
         end
 
 
@@ -6059,7 +6061,7 @@ classdef proudData
         % Fractional 2D image shift
         % ---------------------------------------------------------------------------------
         function imOut = image2Dshift(imIn, xShift, yShift)
-            
+
             % Shift image on sub-pixel level in x- and y-directions
 
             % Transform image to k-space
@@ -6070,7 +6072,7 @@ classdef proudData
 
             % Perform the shift in k-space
             H = H.*exp(-1i*2*pi.*(xF*xShift/size(imIn,2)+yF*yShift/size(imIn,1)));
-            
+
             % Transform image back from k-space
             % Note: this is a complex image now
             imOut = proudData.fft2Dmri(H);

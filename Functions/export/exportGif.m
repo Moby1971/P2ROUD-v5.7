@@ -5,7 +5,7 @@ function folderName = exportGif(app, tag)
 % ------------------------------------
 
 % Proud data parameters object
-obj = app.proudDataPars;
+obj = app.pd;
 
 % Input images
 gifImages = obj.images;

@@ -8,7 +8,7 @@ function folderName = exportDicomMRD(app, tag)
 
 
 % Proud data parameters object
-obj = app.proudDataPars;
+obj = app.pd;
 
 directory = app.dicomExportPath;
 image = obj.images;
@@ -84,7 +84,7 @@ if obj.validFlow_flag
     app.TextMessage('Exporting flow images to dicom ...');
 
     % Proud data parameters object
-    obj = app.proudDataPars;
+    obj = app.pd;
 
     directory = app.dicomExportPath;
     image = obj.flowImages*100; %% scale by factor 100

@@ -209,7 +209,9 @@ classdef proudData
     % obj = unwrap3D(obj)
     % obj = calcFlow(obj)
     % obj = ExportRecoParametersFcn(obj, app, exportdir)
-    % obj = calc2DimageShift(obj, image, app)
+    % obj = get3DimageShift(obj, image, app)
+    % obj = shiftImages2D(obj, app)
+    % obj = shiftImages3D(obj, app)
     %
     %
     % -----------------------------------------------------------------
@@ -238,6 +240,66 @@ classdef proudData
     % imOut = image2Dshift(imIn, xShift, yShift)
     %
     %
+    %
+    %
+    % ----------------------------------------------------------------------
+    % Methods, GUI elements & variables from the P2ROUD app 
+    % that are used in the class
+    % ----------------------------------------------------------------------
+    %
+    % app.TextMessage
+    % app.SetStatus    
+    %
+    % app.OrientationSpinner.Value
+    % app.SlabOverlapEditField.Value
+    % app.NREditField.Value
+    % app.NFAViewField.Value
+    % app.NAViewField.Value
+    % app.NEViewField.Value
+    % app.FAViewField.Value
+    % app.XEditField.Value
+    % app.YEditField.Value
+    % app.ZEditField.Value
+    % app.KMatrixViewField1.Value
+    % app.KMatrixViewField2.Value
+    % app.KMatrixViewField3.Value
+    % app.WVxyzEditField.Value
+    % app.TVxyzEditField.Value
+    % app.LRxyzEditField.Value
+    % app.TVtimeEditField.Value
+    % app.CSRecoCheckBox.Value
+    % app.AutoSensitivityCheckBox.Value
+    % app.RecoProgressGauge.Value
+    % app.CenterEchoCheckBox.Value
+    % app.PhaseCorrectCheckBox.Value
+    % app.GxDelayEditField.Value
+    % app.GyDelayEditField.Value
+    % app.GzDelayEditField.Value
+    % app.DataOffsetRadialEditField.Value
+    % app.GradDelayCalibrationCheckBox.Value
+    % app.RingMethodCheckBox.Value
+    % app.DeNoiseCheckBox.Value
+    % app.DeNoiseWindowEditField.Value
+    % app.FOVViewField1.Value
+    % app.FOVViewField2.Value
+    % app.FOVViewField3.Value
+    % app.MRDfileViewField.Value
+    % app.SequenceViewField.Value
+    % app.ScanTimeViewField.Value
+    % app.TimeDynViewField.Value
+    % app.TRViewField.Value
+    % app.TEViewField.Value
+    % app.TrajectoryViewField.Value
+    %
+    % app.appVersion
+    % app.tag
+    % app.imageOrient
+    % app.bartDetected_flag
+    % app.stopGradCal_flag
+    % app.RecoFig
+    %
+    %
+
 
 
 
@@ -1069,7 +1131,7 @@ classdef proudData
 
             end
 
-        end % imageOrient
+        end % imageOrientLabels
 
 
 
@@ -2239,7 +2301,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Remove navigator if present
         % ---------------------------------------------------------------------------------
-        function obj = chopNav(obj,app)
+        function obj = chopNav(obj, app)
 
             % Chop of the navigator if present
             if obj.slice_nav == 1
@@ -2344,7 +2406,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 2D CINE
         % ---------------------------------------------------------------------------------
-        function obj = csReco2DCine(obj,app,flipAngle)
+        function obj = csReco2DCine(obj, app, flipAngle)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -2472,7 +2534,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 2D
         % ---------------------------------------------------------------------------------
-        function obj = csReco2D(obj,app,flipAngle,echoTime)
+        function obj = csReco2D(obj, app, flipAngle, echoTime)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -2751,7 +2813,7 @@ classdef proudData
         % Image reconstruction: FFT 2D
         % Version February 2023
         % ---------------------------------------------------------------------------------
-        function obj = fftReco2D(obj,app,flipAngle,echoTime)
+        function obj = fftReco2D(obj, app, flipAngle, echoTime)
 
             kSpaceRaw = cell(obj.nrCoils);
             kSpaceRawOrig = cell(obj.nrCoils);
@@ -2889,7 +2951,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 3D
         % ---------------------------------------------------------------------------------
-        function obj = csReco3D(obj,app,flipAngle,echoTime)
+        function obj = csReco3D(obj, app, flipAngle, echoTime)
 
             % Reset progress counter
             param.iteration = 0;
@@ -3245,7 +3307,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: FFT 3D
         % ---------------------------------------------------------------------------------
-        function obj = fftReco3D(obj,app,flipAngle,echoTime)
+        function obj = fftReco3D(obj, app, flipAngle, echoTime)
 
             kSpaceRaw = cell(obj.nrCoils);
             for i=1:obj.nrCoils
@@ -3415,7 +3477,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 2D Radial
         % ---------------------------------------------------------------------------------
-        function obj = Reco2DRadialCS(obj,app,flipAngle,echoTime)
+        function obj = Reco2DRadialCS(obj, app, flipAngle, echoTime)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -3556,7 +3618,7 @@ classdef proudData
 
                         dTotal = [];
 
-                        delaysBart = bart(app,'estdelay -r4 ',trajPicsSum,kSpacePicsSum);
+                        delaysBart = bart(app,'estdelay -r5 ',trajPicsSum,kSpacePicsSum);
 
                         % Remove unkown warning
                         ff = strfind(delaysBart,"[0m");
@@ -3567,9 +3629,8 @@ classdef proudData
                         end
 
                         delaysBart = strrep(delaysBart,':',',');
-                        dTotal = str2num(delaysBart);
-                        dTotal(1) = - dTotal(1); % It seems this correction should be the inverted
-
+                        dTotal = -str2num(delaysBart);
+                        
                     catch ME
 
                         app.TextMessage(ME.message);
@@ -3769,7 +3830,7 @@ classdef proudData
 
             % Prepare the 2D radial PICS reconstruction
             app.TextMessage('PICS reconstruction ...');
-            picsCommand = 'pics -i20 -e ';
+            picsCommand = 'pics -i20 -e -d5 ';
             if LW>0
                 picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
             end
@@ -3826,7 +3887,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: NUFFT 2D Radial
         % ---------------------------------------------------------------------------------
-        function obj = Reco2DRadialNUFFT(obj,app,flipAngle,echoTime)
+        function obj = Reco2DRadialNUFFT(obj, app, flipAngle, echoTime)
 
             % Original kx, ky, slices, dynamics
             kSpaceRaw = cell(obj.nrCoils);
@@ -3960,7 +4021,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: CS 3D UTE with BART
         % ---------------------------------------------------------------------------------
-        function obj = Reco3DuteCS(obj,app,flipAngle,echoTime)
+        function obj = Reco3DuteCS(obj, app, flipAngle, echoTime)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -4321,7 +4382,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: NUFFT 3D UTE with Matlab
         % ---------------------------------------------------------------------------------
-        function obj = Reco3DuteNUFFT(obj,app,flipAngle,echoTime)
+        function obj = Reco3DuteNUFFT(obj, app, flipAngle, echoTime)
 
             % Original kx(readout), ky(spokes)
             kSpaceRaw = cell(obj.nrCoils);
@@ -4449,7 +4510,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % PCA denoising
         % ---------------------------------------------------------------------------------
-        function obj = PCAdenoise(obj,app)
+        function obj = PCAdenoise(obj, app)
 
             try
 
@@ -4529,7 +4590,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Suppress Gibbs ringing
         % ---------------------------------------------------------------------------------
-        function obj = unRing(obj,app)
+        function obj = unRing(obj, app)
 
             try
 
@@ -4588,7 +4649,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image resolution
         % ---------------------------------------------------------------------------------
-        function obj = calcPixelSize(obj,app)
+        function obj = calcPixelSize(obj, app)
 
             % Calculate pixel size in different dimensions
 
@@ -4796,7 +4857,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Flow calculation
         % ---------------------------------------------------------------------------------
-        function obj = calcFlow(obj,app)
+        function obj = calcFlow(obj, app)
 
             encDir = obj.vencTable(:,2:4);
             Venc = obj.vencTable(:,1);
@@ -4883,16 +4944,16 @@ classdef proudData
                 "datafile = ", app.MRDfileViewField.Value, "\n", ...
                 "sequence = ", app.SequenceViewField.Value, "\n\n",...
                 "\nDIMENSIONS \n\n", ...
-                "dim_x = ", num2str(size(app.proudDataPars.images,1)), "\n", ...
-                "dim_y = ", num2str(size(app.proudDataPars.images,2)), "\n", ...
-                "dim_z = ", num2str(size(app.proudDataPars.images,3)) , "\n", ...
+                "dim_x = ", num2str(size(obj.images,1)), "\n", ...
+                "dim_y = ", num2str(size(obj.images,2)), "\n", ...
+                "dim_z = ", num2str(size(obj.images,3)) , "\n", ...
                 "FOV_x = ", num2str(app.FOVViewField1.Value), " mm \n", ...
                 "FOV_y = ", num2str(app.FOVViewField2.Value), " mm \n", ...
                 "FOV_z = ", num2str(app.FOVViewField3.Value), " mm \n", ...
                 "k_x = ", num2str(app.KMatrixViewField1.Value), "\n", ...
                 "k_y = ", num2str(app.KMatrixViewField2.Value), "\n", ...
                 "k_z = ", num2str(app.KMatrixViewField3.Value), "\n", ...
-                "#slabs = ", num2str(size(app.proudDataPars.rawKspace{1},7)), "\n\n", ...
+                "#slabs = ", num2str(size(obj.rawKspace{1},7)), "\n\n", ...
                 "\nSCAN PARAMETERS\n\n", ...
                 "scan time = ", app.ScanTimeViewField.Value, "\n", ...
                 "time per dynamic = ", app.TimeDynViewField.Value, "\n", ...
@@ -4902,7 +4963,7 @@ classdef proudData
                 "#averages = ", num2str(app.NAViewField.Value), "\n", ...
                 "#flip angles = ", num2str(app.NFAViewField.Value), "\n", ...
                 "flip angle(s) = ", app.FAViewField.Value, "\n", ...
-                "#repetitions = ", num2str(app.NRViewField.Value), "\n", ...
+                "#repetitions = ", num2str(app.NREditField.Value), "\n", ...
                 "trajectory = ", app.TrajectoryViewField.Value, "\n\n", ...
                 "\nRECONSTRUCTION PARAMETERS\n\n", ...
                 "Wavelet = ",num2str(app.WVxyzEditField.Value), "\n", ...
@@ -4912,7 +4973,7 @@ classdef proudData
                 "CSreco = ",num2str(app.CSRecoCheckBox.Value), "\n\n" ...
                 );
 
-            if strcmp(app.proudDataPars.dataType,'2Dradial')
+            if strcmp(obj.dataType,'2Dradial')
                 pars = strcat(pars,...
                     "\n2D radial\n\n", ...
                     "Gx delay = ",num2str(app.GxDelayEditField.Value),"\n",...
@@ -4924,7 +4985,7 @@ classdef proudData
                     );
             end
 
-            if strcmp(app.proudDataPars.dataType,'3Dute')
+            if strcmp(obj.dataType,'3Dute')
                 pars = strcat(pars,...
                     "\n2D radial\n\n", ...
                     "Gx delay = ",num2str(app.GxDelayEditField.Value),"\n",...
@@ -4947,7 +5008,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Retrieve the 3D image shift for off-center and oblique Radial and P2ROUD sequences
         % ---------------------------------------------------------------------------------
-        function objData = get3DimageShift(objData, image, app)
+        function obj = get3DimageShift(obj, app, image)
 
             % Image dimensions in pixels  (x,y,z,nr,fa,ne)
             dx = size(image,1);
@@ -4955,12 +5016,12 @@ classdef proudData
             dz = size(image,3);
 
             % Calculate the shift
-            relShiftX = dx*objData.fov_read_off/4000;      % Relative offset, scaling from PPL file
-            relShiftY = dy*objData.fov_phase_off/4000;
-            relShiftZ = dz*objData.fov_slice_off/400;
+            relShiftX = dx*obj.fov_read_off/4000;      % Relative offset, scaling from PPL file
+            relShiftY = dy*obj.fov_phase_off/4000;
+            relShiftZ = dz*obj.fov_slice_off/400;
 
             % Different readout / phase depending on phase_orientation value
-            if objData.PHASE_ORIENTATION
+            if obj.PHASE_ORIENTATION
 
                 shiftInX = +relShiftX;
                 shiftInY = -relShiftY;
@@ -4975,17 +5036,17 @@ classdef proudData
             end
 
             % Report the values back / return the object
-            objData.xShift = shiftInX;
-            objData.yShift = shiftInY;
-            objData.zShift = shiftInZ;
+            obj.xShift = shiftInX;
+            obj.yShift = shiftInY;
+            obj.zShift = shiftInZ;
 
             % Readout shift already taken care of in PPL sequence
-            if strcmp(objData.trajType,'P2ROUD')
-                objData.xShift = 0;
+            if strcmp(obj.trajType,'P2ROUD')
+                obj.xShift = 0;
             end
 
             % Textmessage
-            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels, ΔZ = %.2f pixels ...',objData.xShift(1),objData.yShift(1),objData.zShift(1)));
+            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels, ΔZ = %.2f pixels ...',obj.xShift(1),obj.yShift(1),obj.zShift(1)));
 
         end % get3DimageShift
 
@@ -4994,26 +5055,26 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Apply sub-pixel 2D image shift (2D radial)
         % ---------------------------------------------------------------------------------
-        function objData = shiftImages2D(objData,app)
+        function obj = shiftImages2D(obj, app)
 
             % Retrieve the in-plane image shifts
-            objData = objData.get3DimageShift(objData.images, app);
+            obj = obj.get3DimageShift(app, obj.images);
 
             % Apply the shift on sub-pixel level to the complex images
-            for echo = 1:size(objData.images,6)
-                for flipAngle = 1:size(objData.images,5)
-                    for dynamic = 1:size(objData.images,4)
-                        for slice = 1:size(objData.images,3)
-                            objData.complexImages(:,:,slice,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(:,:,slice,dynamic,flipAngle,echo)),objData.yShift(slice),objData.xShift(slice));
+            for echo = 1:size(obj.images,6)
+                for flipAngle = 1:size(obj.images,5)
+                    for dynamic = 1:size(obj.images,4)
+                        for slice = 1:size(obj.images,3)
+                            obj.complexImages(:,:,slice,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,flipAngle,echo)),obj.yShift(slice),obj.xShift(slice));
                         end
                     end
                 end
             end
 
             % Calculate mangitude and phase images
-            objData.images = abs(objData.complexImages);
-            objData.phaseImages = angle(objData.complexImages);
-            objData.phaseImagesOrig = angle(objData.complexImages);
+            obj.images = abs(obj.complexImages);
+            obj.phaseImages = angle(obj.complexImages);
+            obj.phaseImagesOrig = angle(obj.complexImages);
 
         end % shiftImages2D
 
@@ -5023,36 +5084,36 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Apply sub-pixel 3D image shift (3D P2ROUD trajectory)
         % ---------------------------------------------------------------------------------
-        function objData= shiftImages3D(objData,app)
+        function obj = shiftImages3D(obj, app)
 
             % Retrieve the in-plane image shifts
-            objData = objData.get3DimageShift(objData.images, app);
+            obj = obj.get3DimageShift(app, obj.images);
 
             % Apply the shift on sub-pixel level to the complex images
-            for echo = 1:size(objData.images,6)
-                for flipAngle = 1:size(objData.images,5)
-                    for dynamic = 1:size(objData.images,4)
-                        for slice = 1:size(objData.images,3)
-                            objData.complexImages(:,:,slice,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(:,:,slice,dynamic,flipAngle,echo)),objData.yShift(1),objData.xShift(1));
+            for echo = 1:size(obj.images,6)
+                for flipAngle = 1:size(obj.images,5)
+                    for dynamic = 1:size(obj.images,4)
+                        for slice = 1:size(obj.images,3)
+                            obj.complexImages(:,:,slice,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,flipAngle,echo)),obj.yShift(1),obj.xShift(1));
                         end
                     end
                 end
             end
 
-            for echo = 1:size(objData.images,6)
-                for flipAngle = 1:size(objData.images,5)
-                    for dynamic = 1:size(objData.images,4)
-                        for readout = 1:size(objData.images,1)
-                            objData.complexImages(readout,:,:,dynamic,flipAngle,echo) = objData.image2Dshift(squeeze(objData.complexImages(readout,:,:,dynamic,flipAngle,echo)),objData.zShift(1),0);
+            for echo = 1:size(obj.images,6)
+                for flipAngle = 1:size(obj.images,5)
+                    for dynamic = 1:size(obj.images,4)
+                        for readout = 1:size(obj.images,1)
+                            obj.complexImages(readout,:,:,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(readout,:,:,dynamic,flipAngle,echo)),obj.zShift(1),0);
                         end
                     end
                 end
             end
 
             % Calculate mangitude and phase images
-            objData.images = abs(objData.complexImages);
-            objData.phaseImages = angle(objData.complexImages);
-            objData.phaseImagesOrig = angle(objData.complexImages);
+            obj.images = abs(obj.complexImages);
+            obj.phaseImages = angle(obj.complexImages);
+            obj.phaseImagesOrig = angle(obj.complexImages);
 
         end % shiftImages3D
 

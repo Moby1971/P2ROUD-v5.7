@@ -6,7 +6,7 @@ function folderName = exportDicomDCM(app, dcmdir)
 
 
 % Proud data parameters object
-obj = app.proudDataPars;
+obj = app.pd;
 
 
 
@@ -98,7 +98,7 @@ if obj.validFlow_flag
     app.TextMessage('Exporting flow images to dicom ...');
 
     % Proud data parameters object
-    obj = app.proudDataPars;
+    obj = app.pd;
 
     directory = app.dicomExportPath;
     image = obj.flowImages*100;  % scale by factor 100
@@ -118,8 +118,8 @@ if obj.validFlow_flag
     NF = size(image,7);
 
     % For flow data the TE dimensions is the movie frame and TR the frame time
-    app.proudDataPars.nr_frames = NE;
-    app.proudDataPars.timeperframe = app.proudDataPars.tr;
+    app.pd.nr_frames = NE;
+    app.pd.timeperframe = app.pd.tr;
 
     % reading in the DICOM header information
     listing = dir(fullfile(dcmdir, '*.dcm'));

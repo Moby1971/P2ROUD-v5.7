@@ -21,7 +21,7 @@ mask = true(size(image,1),size(image,2));
 
 [image,mask] = imageAssert(image,mask);
 
-dnwindow = [window(1), window(2), 1];
+dnwindow = [window(1), window(2), 2];
 
 dims = size(image);
 
@@ -51,7 +51,7 @@ for index = 0:M*N*O-1
     end
 
     % denoise X
-    [X(:,maskX),s2,p] = denoiseMatrix(X(:,maskX));
+    [X(:,maskX),~,~] = denoiseMatrix(X(:,maskX));
 
     % assign
     X(:,~maskX) = 0;
@@ -124,6 +124,7 @@ function [image_out,mask] = imageAssert(image_in,mask)
 % on the form: row x col x slice x rest.
 
 dims = size(image_in);
+
 assert(length(dims)<=4,'image data array must not have more than 4 dimensions')
 
 % construct mask if not given

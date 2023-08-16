@@ -19,6 +19,7 @@ classdef proudData
         phaseImagesOrig = []                                % original phase images (without unwrapping)
         flowImages = []                                     % flow images
         mask = []                                           % image mask
+        epiMask = []                                        % mask for epi images
         nsaSpace = []                                       % number of signal averages per k-point
         fillingSpace = []                                   % filling (1 = yes / 0 = no) per k-point
         pixelSize = []                                      % pixel size (mm)
@@ -54,6 +55,7 @@ classdef proudData
         NO_SLICES = 1                                       % number of slices
         NO_ECHOES = 1                                       % number of echoes
         nav_on = 0                                          % navigator on (1) / off (0)
+        no_navs = 1                                         % number of navigators
         VIEWS_PER_SEGMENT = 0                               % views per segment / interleaved scanning
         lines_per_segment = 1                               % lines per segment
         SLICE_THICKNESS = 1                                 % slice thickness (mm)
@@ -559,6 +561,10 @@ classdef proudData
 
             if isfield(parameters,'nav_on')
                 obj.nav_on = parameters.nav_on;
+            end
+
+            if isfield(parameters,'no_navs')
+                obj.no_navs = parameters.no_navs;
             end
 
             if isfield(parameters,'VIEWS_PER_SEGMENT')
@@ -2326,12 +2332,108 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
+        % Perform some EPI corrections
+        % Aug 2023
+        % ---------------------------------------------------------------------------------
+        function [obj, kSpace] = epiCorr(obj, app, kSpace)
+
+            app.TextMessage('Performing EPI corrections ...');
+
+            [~,~,dimz,dimd,dimc] = size(kSpace);
+
+            % Parameters
+            kCenter = 0.5;
+            pCenter = 0.1;
+            method = 'Gh/Ob'; % options: ent, entSmooth, svd, Gh/Ob
+
+            % Calculate Ghost corrections
+            dynamic = 0;
+            while (dynamic<dimd) && ~app.stopReco_flag
+                dynamic = dynamic + 1;
+                app.TextMessage(strcat("Ghost corrections dynamic ",num2str(dynamic)," ..."));
+                slice = 0;
+                while (slice<dimz) && ~app.stopReco_flag 
+                    slice = slice + 1;
+                    for coil = 1:dimc
+                        kSpaceGhost = squeeze(kSpace(:,:,slice,dynamic,coil));
+                        try
+                            kSpaceCorrected = applyEPIcorrection_mex(kSpaceGhost, kCenter, pCenter, method);
+                        catch
+                            kSpaceCorrected = applyEPIcorrection(kSpaceGhost, kCenter, pCenter, method);
+                        end
+                        kSpace(:,:,slice,dynamic,coil) = kSpaceCorrected;
+                    end
+                    drawnow;
+                end
+            end
+
+
+            % Retrieving EPI mask, if present
+            obj.epiMask = [];
+            for coil = 1:obj.nrCoils
+                obj.epiMask(:,:,:,coil) = ones(size(kSpace(:,:,:,1,coil)));
+            end
+
+            try
+                if obj.rprFile_flag
+
+                    idx1 = strfind(obj.rprFile,'MaskImageDirectory=');
+
+                    if ~isempty(idx1)
+
+                        idx1 = idx1 + 20;
+                        idx2 = idx1 + strfind(obj.rprFile(idx1(1):idx1(1)+60),'Image\\') + 6;
+                        idx3 = idx2 + strfind(obj.rprFile(idx2(1):idx2(1)+10),'\\') - 2;
+                        scanNumber = obj.rprFile(idx2(1):idx3(1));
+                        slocs = strfind(app.mrdImportPath,filesep);
+                        scanMask = strcat(app.mrdImportPath(1:slocs(end-1)),scanNumber,filesep);
+                        fList = dir(fullfile(strcat(scanMask,'*.MRD')));
+                        app.TextMessage(strcat("EPI mask image scan = ",fList(1).name," ..."));
+
+                        % Load masking k-space data
+                        for i=1:obj.nrCoils
+                            [kSpaceMask{i},~,~,~] = proudData.importMRD(fullfile(fList(i).folder,fList(i).name),'seq','cen');
+                            kSpaceMask{i} = permute(kSpaceMask{i},[3 2 1]);
+                        end
+
+                        % Reconstruct mask images
+                        imageMask = zeros(size(kSpaceMask{1}));
+                        for i=1:obj.nrCoils
+                            imageMask = imageMask + abs(obj.fft2Dmri(kSpaceMask{i})).^2;
+                        end
+
+                        % Copy mask to different coils
+                        for i=1:obj.nrCoils
+                            imageMask(:,:,:,i) = imageMask(:,:,:,1);
+                        end
+
+                        % Threshold to binary mask
+                        obj.epiMask = ones(size(imageMask));
+                        thr = 0.15 * double(graythresh(mat2gray(imageMask(:)))) * max(imageMask(:));
+                        obj.epiMask(imageMask < thr) = 0;
+
+                    end
+                end
+
+            catch ME
+
+                app.TextMessage(ME.message);
+                app.TextMessage('Warning: something went wrong during EPI mask construction ...');
+            
+            end
+
+        end % epiCorr
+
+
+
+
+        % ---------------------------------------------------------------------------------
         % Apply Tukey k-space filter
         % Version: February 2023
         % ---------------------------------------------------------------------------------
         function obj = applyTukey(obj)
 
-            filterWidth = 0.25;
+            filterWidth = 0.1;
             dimx = size(obj.rawKspace{1},1);
             dimy = size(obj.rawKspace{1},2);
             dimz = size(obj.rawKspace{1},3);
@@ -2364,12 +2466,6 @@ classdef proudData
                     case "2Dradial"
 
                         % Probably better to apply after center shift
-
-                        % tmpFilter = tukeywin(dimx,filterWidth);
-                        % for i = 1:obj.nrCoils
-                        %   tukeyFilter(:,1,1,1,1,1) = tmpFilter;
-                        %   obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                        % end
 
                     case "3D"
 
@@ -2424,12 +2520,13 @@ classdef proudData
             dimx = app.XEditField.Value;
             dimy = app.YEditField.Value;
             dimz = size(kSpaceRaw{1},3);
+            app.ZEditField.Value = dimz;
             dimd = app.NREditField.Value;
             dimte = size(kSpaceRaw{1},6);
 
             % Resize k-space to next power of 2
             for i = 1:obj.nrCoils
-                kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
+                kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 3 ',num2str(dimd)],kSpaceRaw{i});
             end
 
             % Put all data in a normal matrix
@@ -2555,17 +2652,23 @@ classdef proudData
                 dimx = app.XEditField.Value;
                 dimy = app.YEditField.Value;
                 dimz = size(kSpaceRaw{1},3);
+                app.ZEditField.Value = dimz;
                 dimd = app.NREditField.Value;
 
                 % Resize k-space to next power of 2
                 for i = 1:obj.nrCoils
-                    kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
+                    kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 3 ',num2str(dimd)],kSpaceRaw{i});
                 end
 
-                % kspace data x,y,NR,slices,coils
-                kSpace = zeros(dimx,dimy,dimz,dimd,1,obj.nrCoils);
+                % kspace data x,y,slices,NR,coils
+                kSpace = zeros(dimx,dimy,dimz,dimd,obj.nrCoils);
                 for i = 1:obj.nrCoils
-                    kSpace(:,:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
+                    kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
+                end
+
+                % For EPI data
+                if strcmp(obj.dataType,'2Depi')
+                    [obj, kSpace] = obj.epiCorr(app, kSpace);
                 end
 
                 % Bart dimensions
@@ -2587,7 +2690,7 @@ classdef proudData
 
                 %                            0  1  2  3  4  5  6  7  8  9  10 11 12 13
                 %                            1  2  3  4  5  6  7  8  9  10 11 12 13 14
-                kSpacePics = permute(kSpace,[5 ,2 ,1 ,6 ,7 ,8 ,9 ,10,11,12,4 ,13,14,3 ]);
+                kSpacePics = permute(kSpace,[6 ,2 ,1 ,5 ,7 ,8 ,9 ,10,11,12,4 ,13,14,3 ]);
 
                 % wavelet in y and x spatial dimensions 2^1+2^2=6
                 % total variation in y and x spatial dimensions 2^1+2^2=6
@@ -2647,6 +2750,16 @@ classdef proudData
                     imagesOut = flip(flip(imagesOut,2),1);
                 end
 
+                % Masking of EPI data
+                if strcmp(obj.dataType,'2Depi')
+                    for dynamic = 1:dimd
+                        for slice = 1:dimz
+                            msk(:,:,slice,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[dimx dimy]);
+                        end
+                    end
+                    imagesOut = imagesOut.*flip(msk,2);
+                end
+
                 % Return the images object
                 obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
                 obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
@@ -2664,6 +2777,7 @@ classdef proudData
                 dimx = size(kSpaceRaw{1},1);
                 dimy = size(kSpaceRaw{1},2);
                 dimz = size(kSpaceRaw{1},3);
+                app.ZEditField.Value = dimz;
                 dimd = size(kSpaceRaw{1},4);
                 app.NREditField.Value = dimd;
                 ndimx = app.XEditField.Value;
@@ -2680,6 +2794,12 @@ classdef proudData
                         kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilSensitivities(i)*obj.coilActive_flag(i);
                     end
                 end
+                
+                % For EPI data
+                if strcmp(obj.dataType,'2Depi')
+                    [obj, kSpace] = obj.epiCorr(app, kSpace);
+                end
+
                 kSpace = permute(kSpace,[1,2,4,3,5]);
                 averages = obj.fillingSpace(:,:,:,:,flipAngle,echoTime);
                 averages = permute(averages,[1,2,4,3]);
@@ -2783,6 +2903,14 @@ classdef proudData
                         imagesOut(:,:,slice,:) = imageTmp;
                     end
 
+                    % Masking of EPI data
+                    if strcmp(obj.dataType,'2Depi')
+                        for dynamic = 1:dimd
+                            msk(:,:,1,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[size(imagesOut,1) size(imagesOut,2)]);
+                        end
+                        imagesOut(:,:,slice,:) = imagesOut(:,:,slice,:).*flip(msk,2);
+                    end
+
                 end
 
                 % Flip dimensions if required
@@ -2811,7 +2939,7 @@ classdef proudData
 
         % ---------------------------------------------------------------------------------
         % Image reconstruction: FFT 2D
-        % Version February 2023
+        % Version Aug 2023
         % ---------------------------------------------------------------------------------
         function obj = fftReco2D(obj, app, flipAngle, echoTime)
 
@@ -2826,28 +2954,28 @@ classdef proudData
             dimx = size(kSpaceRaw{1},1);
             dimy = size(kSpaceRaw{1},2);
             dimz = size(kSpaceRaw{1},3);
+            app.ZEditField.Value = dimz;
             dimd = size(kSpaceRaw{1},4);
             dimc = obj.nrCoils;
 
             % Requested dimensions
             ndimx = app.XEditField.Value;
             ndimy = app.YEditField.Value;
-            ndimz = app.ZEditField.Value;
             ndimd  = app.NREditField.Value;
 
             for i = 1:obj.nrCoils
-                if dimd ~= ndimd || dimz ~= ndimz
+                if dimd ~= ndimd 
                     % Interpolate the time dimension if requested
                     kSpaceRaw{i} = permute(kSpaceRaw{i},[4,3,1,2]);
-                    kSpaceRaw{i} = imresize(kSpaceRaw{i},[ndimd,ndimz]);
+                    kSpaceRaw{i} = imresize(kSpaceRaw{i},[ndimd,dimz]);
                     kSpaceRaw{i} = permute(kSpaceRaw{i},[3,4,2,1]);
                 end
-                % Kspace data x,y,NR,slices
-                kSpaceRaw{i} = permute(kSpaceRaw{i},[1,2,4,3]);
+                % Kspace data x,y,slices,NR
+                % kSpaceRaw{i} = permute(kSpaceRaw{i},[1,2,4,3]);
             end
 
-            % Kspace data x,y,NR,slices,coils
-            kSpace = zeros(dimx,dimy,ndimd,ndimz,dimc);
+            % Kspace data x,y,slice,NR,coils
+            kSpace = zeros(dimx,dimy,dimz,ndimd,dimc);
 
             if app.AutoSensitivityCheckBox.Value == 1
                 for i = 1:dimc
@@ -2860,7 +2988,7 @@ classdef proudData
             end
 
             % Preallocate
-            imagesOut = zeros(ndimx,ndimy,ndimz,ndimd,dimc);
+            imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimc);
 
             % Message
             if obj.halfFourier_flag
@@ -2869,19 +2997,32 @@ classdef proudData
                 app.TextMessage('Standard FFT reconstruction ...');
             end
 
-            % Slice and dynamic loop
-            for slice = 1:ndimz
+            % For EPI data
+            if strcmp(obj.dataType,'2Depi')
+                [obj, kSpace] = obj.epiCorr(app, kSpace);
+            end
 
-                for dynamic = 1:ndimd
+            % Dynamic loop
+            dynamic = 0;
+            while (dynamic<ndimd) && ~app.stopReco_flag
+                dynamic = dynamic + 1;
 
+                app.TextMessage(strcat("Reconstructing dynamic ",num2str(dynamic)," ..."));
+                drawnow;
+
+                % Slice loop
+                slice = 0;
+                while (slice<dimz) && ~app.stopReco_flag
+                    slice = slice + 1;
+             
                     % Homodyne / normal FFT
                     if obj.halfFourier_flag
-                        kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
+                        kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
                         image2D = zeros(dimx,dimy,nnz(obj.coilActive_flag));
-                        imageIn(:,:,1,:) = kdatai(:,:,obj.coilActive_flag);
+                        imageIn(:,:,:,1) = kdatai(:,:,obj.coilActive_flag);
                         image2D(:,:,:) = squeeze(homodyne(imageIn,app));
                     else
-                        kdatai = squeeze(kSpace(:,:,dynamic,slice,:));
+                        kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
                         image2D = zeros(dimx,dimy,dimc);
                         for coil = 1:dimc
                             image2D(:,:,coil) = proudData.fft2Dmri(squeeze(kdatai(:,:,coil)));
@@ -2920,12 +3061,20 @@ classdef proudData
 
                     end
 
+                    % Masking of EPI data
+                    if strcmp(obj.dataType,'2Depi')
+                        for coil = 1:size(image2D,4)
+                            msk(:,:,coil) = imresize(squeeze(obj.epiMask(:,:,slice,coil)),[size(image2D,1) size(image2D,2)]);
+                        end
+                        image2D = image2D.*msk;
+                    end
+
                     % Return the image
                     imagesOut(:,:,slice,dynamic,:) = image2D;
 
-                end
+                end % slice loop
 
-            end
+            end % dynamic loop
 
             % Flip dimensions if required
             if obj.PHASE_ORIENTATION == 1

@@ -1,4 +1,4 @@
-function folderName = exportGif(app, tag)
+function folderName = exportGifProud(app)
 
 % ------------------------------------
 % ----- Export of images to gif ------
@@ -11,9 +11,11 @@ obj = app.pd;
 gifImages = obj.images;
 
 % Create folder if not exist, and delete folder content
-folderName = [app.gifExportPath,[filesep,tag,'P-GIF']];
-if (~exist(folderName, 'dir')); mkdir(folderName); end
-delete([folderName,filesep,'*']);
+folderName = app.gifExportPath;
+if (~exist(folderName, 'dir')) 
+    mkdir(folderName); 
+end
+delete(strcat(folderName,filesep,'*'));
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1
@@ -72,7 +74,7 @@ for i=1:dimd % loop over all repetitions
             if cine
 
                 % File name
-                fname = [folderName,filesep,'movie_d',num2str(i),'_s',num2str(z),'_fa',num2str(j),'.gif'];
+                fname = strcat(folderName,filesep,'movie_d',num2str(i),'_s',num2str(z),'_fa',num2str(j),'.gif');
 
                 % Delay time
                 delayTime = 1/NE;
@@ -99,7 +101,7 @@ for i=1:dimd % loop over all repetitions
                 for k=1:NE      % loop over all echo times, multi-echo
 
                     % File name
-                    fname = [folderName,filesep,'image_s',num2str(z),'_fa',num2str(j),'_te',num2str(k),'.gif'];
+                    fname = strcat(folderName,filesep,'image_s',num2str(z),'_fa',num2str(j),'_te',num2str(k),'.gif');
 
                     % The image
                     im = rot90(uint8(round(imresize(squeeze(gifImages(:,:,z,i,j,k)),[numRows numCols]))));
@@ -134,8 +136,10 @@ if obj.validFlow_flag
 
     % Create folder if not exist, and delete folder content
     folderName = strcat(app.gifExportPath,filesep,'flowGIF');
-    if (~exist(folderName, 'dir')); mkdir(folderName); end
-    delete([folderName,filesep,'*']);
+    if (~exist(folderName, 'dir'))
+        mkdir(folderName); 
+    end
+    delete(strcat(folderName,filesep,'*'));
 
     % Phase orientation
     if obj.PHASE_ORIENTATION == 1
@@ -178,7 +182,7 @@ if obj.validFlow_flag
             for j=1:NFA      % loop over all flip angles
 
                 % File name
-                fname = [folderName,filesep,'movie_f',num2str(i),'_s',num2str(z),'_fa',num2str(j),'.gif'];
+                fname = strcat(folderName,filesep,'movie_f',num2str(i),'_s',num2str(z),'_fa',num2str(j),'.gif');
 
                 % Delay time
                 delayTime = 1/NE;

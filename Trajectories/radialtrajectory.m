@@ -18,8 +18,8 @@ close all force;
 
 outputdir = pwd;
 
-dimy = 128;
-dimz = 96;
+dimy = 160;
+dimz = 128;
 order = 1;   % 1 = back and forth, 2 = one direction
 angle_nr = 10;
 display = false;
@@ -95,7 +95,7 @@ else
     ord = 'onedir';
 end
 
-filename = strcat(outputdir,filesep,'Radial_trajectory_dimy=',num2str(dimy),'_dimz=',num2str(dimz),'_angle=',num2str(tiny_golden_angles(angle_nr)),'_',ord,'.txt');
+filename = strcat(outputdir,filesep,'Radial_dimy=',num2str(dimy),'_dimz=',num2str(dimz),'_angle=',num2str(tiny_golden_angles(angle_nr)),'_',ord,'.txt');
 fileID = fopen(filename,'w');
 
 for i = 1:length(kspacelist)

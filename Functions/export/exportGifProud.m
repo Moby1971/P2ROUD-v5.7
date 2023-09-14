@@ -10,12 +10,11 @@ obj = app.pd;
 % Input images
 gifImages = obj.images;
 
-% Create folder if not exist, and delete folder content
+% Create folder if not exist
 folderName = app.gifExportPath;
 if (~exist(folderName, 'dir')) 
     mkdir(folderName); 
 end
-delete(strcat(folderName,filesep,'*'));
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1

@@ -14,9 +14,11 @@ directory = app.dicomExportPath;
 image = obj.images;
 
 % Create folder if not exist, and clear
-folderName = [directory,[filesep,tag,'P']];
-if (~exist(folderName, 'dir')); mkdir(folderName); end
-delete([folderName,filesep,'*']);
+folderName = strcat(directory,filesep,tag,'P');
+if (~exist(folderName, 'dir'))
+    mkdir(folderName); 
+end
+delete(strcat(folderName,filesep,'*'));
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1
@@ -46,9 +48,9 @@ for i = 1:NR      % loop over all repetitions
                 fileCounter = fileCounter + 1;
 
                 % File name
-                fn = ['00000',num2str(fileCounter)];
+                fn = strcat('00000',num2str(fileCounter));
                 fn = fn(size(fn,2)-5:size(fn,2));
-                fname = [folderName,filesep,fn,'.dcm'];
+                fname = strcat(folderName,filesep,fn,'.dcm');
 
                 % Dicom header
                 dcmHeader = generateDicomheaderMRD(fname,fileCounter,i,j,k,z);
@@ -90,9 +92,11 @@ if obj.validFlow_flag
     image = obj.flowImages*100; %% scale by factor 100
 
     % Create folder if not exist, and clear
-    folderName = [directory,[filesep,tag,'PF']];
-    if (~exist(folderName, 'dir')); mkdir(folderName); end
-    delete([folderName,filesep,'*']);
+    folderName = strcat(directory,filesep,tag,'PF');
+    if (~exist(folderName, 'dir'))
+        mkdir(folderName); 
+    end
+    delete(strcat(folderName,filesep,'*'));
 
     % Phase orientation
     if obj.PHASE_ORIENTATION == 1
@@ -100,7 +104,7 @@ if obj.validFlow_flag
     end
 
     [dimx,dimy,dimz,~,NFA,NE,NF] = size(image);
-    NR = 1;
+    NR = 1; %#ok<NASGU> 
 
     % Export the dicom images
     dcmid = dicomuid;   % unique identifier
@@ -122,9 +126,9 @@ if obj.validFlow_flag
                     fileCounter = fileCounter + 1;
 
                     % File name
-                    fn = ['00000',num2str(fileCounter)];
+                    fn = strcat('00000',num2str(fileCounter));
                     fn = fn(size(fn,2)-5:size(fn,2));
-                    fname = [folderName,filesep,'F',num2str(i),fn,'.dcm'];
+                    fname = strcat(folderName,filesep,'F',num2str(i),fn,'.dcm');
 
                     % Dicom header
                     dcmHeader = generateDicomheaderMRDflow(fname,fileCounter,j,k,z);

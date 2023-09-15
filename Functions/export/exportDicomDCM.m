@@ -13,7 +13,6 @@ obj = app.pd;
 directory = app.dicomExportPath;
 image = obj.images;
 
-disp(directory)
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1
@@ -36,15 +35,11 @@ baseHeader = dicominfo(dcmFilename);
 app.TextMessage(strcat('Reading DICOM info from',{' '},dcmFilename));
 
 % create folder if not exist, and delete folder content
-dir1 = baseHeader.PatientID;
-dir2 = 'DICOM';
-dir3 = strcat(num2str(baseHeader.SeriesNumber),'P',num2str(dimd));
-dir4 = '1';
-folderName = strcat(directory,filesep,dir1,filesep,dir2,filesep,dir3,filesep,dir4);
+folderName = strcat(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'P',num2str(dimd));
 if (~exist(folderName, 'dir'))
-    mkdir(fullfile(directory, dir1,dir2,dir3,dir4));
+    mkdir(folderName);
 end
-delete([folderName,filesep,'*']);
+delete(strcat(folderName,filesep,'*'));
 
 % export the dicom images
 fileCounter = 0;
@@ -63,9 +58,9 @@ for i=1:dimd % loop over all repetitions
                 fileCounter = fileCounter + 1;
 
                 % File name
-                fn = ['000000',num2str(fileCounter)];
+                fn = strcat('000000',num2str(fileCounter));
                 fn = fn(size(fn,2)-5:size(fn,2));
-                fname = [folderName,filesep,fn,'.dcm'];
+                fname = strcat(folderName,filesep,fn,'.dcm');
 
                 % Dicom header
                 dcmHeader = generateDicomheaderDCM(baseHeader,fname,fileCounter,i,j,k,z);
@@ -128,15 +123,11 @@ if obj.validFlow_flag
     app.TextMessage(strcat('Reading DICOM info from',{' '},dcmFilename));
 
     % create folder if not exist, and delete folder content
-    dir1 = baseHeader.PatientID;
-    dir2 = 'DICOM';
-    dir3 = strcat(num2str(baseHeader.SeriesNumber),'PF',num2str(dimd));
-    dir4 = '1';
-    folderName = strcat(directory,filesep,dir1,filesep,dir2,filesep,dir3,filesep,dir4);
+    folderName = stract(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'PF',num2str(dimd));
     if (~exist(folderName, 'dir'))
-        mkdir(fullfile(directory, dir1,dir2,dir3,dir4));
+        mkdir(folderName);
     end
-    delete([folderName,filesep,'*']);
+    delete(strcat(folderName,filesep,'*'));
 
     % export the dicom images
     fileCounter = 0;
@@ -155,9 +146,9 @@ if obj.validFlow_flag
                     fileCounter = fileCounter + 1;
 
                     % File name
-                    fn = ['000000',num2str(fileCounter)];
+                    fn = strcat('000000',num2str(fileCounter));
                     fn = fn(size(fn,2)-5:size(fn,2));
-                    fname = [folderName,filesep,'F',num2str(i),fn,'.dcm'];
+                    fname = strcat(folderName,filesep,'F',num2str(i),fn,'.dcm');
 
                     % Dicom header
                     dcmHeader = generateDicomheaderDCMflow(baseHeader,fname,fileCounter,j,k,z);
@@ -184,9 +175,9 @@ end
 
 
 
-    % ----------------------
-    % --- FUNCTIONS --------
-    % ----------------------
+% ----------------------
+% --- FUNCTIONS --------
+% ----------------------
 
     function dicomHeader = generateDicomheaderDCM(dcmHead,fname,fileCounter,i,j,k,z)
 
@@ -335,7 +326,7 @@ end
 
     end % Generate dicom header flow
 
-    % ---- END OF FUNCTIONS ------
+% ---- END OF FUNCTIONS ------
 
 
 end % exportDicomDCM

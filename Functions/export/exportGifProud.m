@@ -24,7 +24,7 @@ end
 
 % Size of the data
 dimx = size(gifImages,1);
-dimy = size(gifImages,2);
+dimy = size(gifImages,2); %#ok<NASGU>
 dimz = size(gifImages,3);
 dimd = size(gifImages,4);
 NFA = size(gifImages,5);

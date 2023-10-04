@@ -10,8 +10,13 @@ obj = app.pd;
 % Input images
 gifImages = obj.images;
 
+% Export folder
+folderName = strcat(app.gifExportPath,filesep,"GIF",filesep,"P2ROUD_GIFS_",app.tag,filesep);
+folderName = strrep(folderName,strcat(filesep,filesep),filesep);
+
+app.TextMessage(strcat("Gif export directory = ",folderName));
+
 % Create folder if not exist
-folderName = app.gifExportPath;
 if (~exist(folderName, 'dir')) 
     mkdir(folderName); 
 end

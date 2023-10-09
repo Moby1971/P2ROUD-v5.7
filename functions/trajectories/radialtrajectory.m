@@ -18,8 +18,8 @@ close all force;
 
 outputdir = pwd;
 
-dimy = 160;
-dimz = 128;
+dimy = 192;
+dimz = 20;
 order = 1;   % 1 = back and forth, 2 = one direction
 angle_nr = 10;
 display = false;

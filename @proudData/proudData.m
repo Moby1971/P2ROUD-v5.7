@@ -973,22 +973,23 @@ classdef proudData
 
                 if ~isempty(pos)
 
-                    % Determine which part should be replaced
-                    oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),newline)-1;
-
-                    % Slice thickness is a special case
-                    if contains(txt,'SLICE_THICKNESS')
-                        commapos = [];
-                        commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+8),',');
-                        inputfooter = insertAfter(inputfooter,pos+length(txt)+commapos,'      ');
-                        pos = pos+commapos;
-                        oldtxtlength = oldtxtlength + 1;
-                    end
-
                     try
-                        % Replace the values with the new ones
-                        newtext = strcat(num2str(var));
-                        inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+
+                        % Determine which part should be replaced
+                        oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),newline)-1;
+
+                        if contains(txt,'SLICE_THICKNESS')
+                            % Slice thickness is a special case
+                            commapos = [];
+                            commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),',');
+                            newtext = strcat(num2str(var));
+                            inputfooter = replaceBetween(inputfooter,pos+length(txt)+commapos(1),pos+length(txt)+oldtxtlength-1,newtext);
+                        else
+                            % Replace the values with the new ones
+                            newtext = strcat(num2str(var));
+                            inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+                        end
+
                     catch
                     end
 
@@ -998,6 +999,7 @@ classdef proudData
 
             % Return the new MRD footer object
             obj.newMrdFooter  = inputfooter;
+
 
         end % makeMrdFooter
 
@@ -3976,7 +3978,7 @@ classdef proudData
                 lowResImage = bart(app,['nufft -i -l2 ',cSize,' -t'], trajPicsSum, kSpacePicsSum);
                 lowResKspace = bart(app,'fft -u 7', lowResImage);
                 kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dimy),' 1 ',num2str(dimx)], lowResKspace);
-                sensitivities = bart(app,'ecalib -t0.002 -m1', kSpaceZeroFilled);
+                sensitivities = bart(app,'ecalib -S -t0.002 -m1', kSpaceZeroFilled);
             else
                 sensitivities = ones(dimx,dimy,1,dimc,1,1,1,1,1,1,1,1,1,dimz);
             end
@@ -3996,7 +3998,7 @@ classdef proudData
 
             % Prepare the 2D radial PICS reconstruction
             app.TextMessage('PICS reconstruction ...');
-            picsCommand = 'pics -i20 -e -d5 ';
+            picsCommand = 'pics -S -i24 -e -d5 ';
             if LW>0
                 picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
             end

@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % Aug 2023
+    % Oct 2023
     %
 
     properties
@@ -2532,7 +2532,7 @@ classdef proudData
             % Put all data in a normal matrix
             kSpace = zeros(dimx,dimy,dimz,dimd,1,dimte,1,obj.nrCoils);
             for i = 1:obj.nrCoils
-                kSpace(:,:,:,:,:,:,1,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
+                kSpace(:,:,:,:,:,:,1,i) = kSpaceRaw{i};
             end
 
             % Bart dimensions
@@ -2559,7 +2559,11 @@ classdef proudData
             % total variation in y and x spatial dimensions 2^1 + 2^2 = 6
             % total variation in TE and dynamic dimension 2^5 + 2^10 = 1056
 
-            if obj.nrCoils>1 && app.AutoSensitivityCheckBox.Value==1
+            % Select the active coils only
+            nrActiveCoils = nnz(obj.coilActive_flag);
+            kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+
+            if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
                 % ESPIRiT reconstruction
                 TextMessage(app,'ESPIRiT reconstruction ...');
@@ -2569,13 +2573,14 @@ classdef proudData
 
             end
 
-            if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
+            if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                 % Sensitivity correction
                 sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,1,1,1,dimz);
                 for i = 1:obj.nrCoils
-                    sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
+                    sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                 end
+                sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
 
             end
 
@@ -2596,19 +2601,19 @@ classdef proudData
             if TVd>0
                 picsCommand = [picsCommand,' -R',obj.totalVariation,':1056:0:',num2str(TVd)];
             end
-            imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+            imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
 
-            % Sum over coils
-            imageTmp = sum(imageTmp,[4,5]);
+            % Combination of coils and/or the two ESPIRiT images using root of sum of squares
+            imageReco = bart(app,'rss 16', imageReco);
 
             % Rearrange to correct orientation: x, y, slices, dynamics, flip-angle, TE (cine)
-            imageReg = permute(imageTmp,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
+            imageReco = permute(imageReco,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
             % Flip dimensions where needed
             if obj.PHASE_ORIENTATION == 1
-                imagesOut = flip(imageReg,2);
+                imagesOut = flip(imageReco,2);
             else
-                imagesOut = flip(flip(imageReg,2),1);
+                imagesOut = flip(flip(imageReco,2),1);
             end
 
             % Return the images object
@@ -2663,7 +2668,7 @@ classdef proudData
                 % kspace data x,y,slices,NR,coils
                 kSpace = zeros(dimx,dimy,dimz,dimd,obj.nrCoils);
                 for i = 1:obj.nrCoils
-                    kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
+                    kSpace(:,:,:,:,i) = kSpaceRaw{i};
                 end
 
                 % For EPI data
@@ -2696,24 +2701,29 @@ classdef proudData
                 % total variation in y and x spatial dimensions 2^1+2^2=6
                 % total variation in dynamic dimension 2^10 = 1024
 
-                if obj.nrCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                % Select the active coils only
+                nrActiveCoils = nnz(obj.coilActive_flag);
+                kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+
+                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
                     % Calculate coil sensitivity maps with ecalib bart function
-                    sensitivities = bart(app,'ecalib -S -I -m2', kSpacePics);      % ecalib with softsense
+                    sensitivities = bart(app,'ecalib -S -I -a -m2', kSpacePics);      % ecalib with softsense
 
                 end
 
-                if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
+                if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                     % Sensitivity correction
                     sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,1,1,1,dimz);
                     for i = 1:obj.nrCoils
-                        sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
+                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
-
+                    sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+     
                 end
 
                 % Pics reconstuction
@@ -2733,15 +2743,14 @@ classdef proudData
                 if TVd>0
                     picsCommand = [picsCommand,' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
-                imageTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+                imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
 
-                % Sum over coils
-                imageTmp = sum(imageTmp,[4,5]);
-
+                % Combination of coils and/or the two ESPIRiT images using root of sum of squares
+                imageReco = bart(app,'rss 24', imageReco);
+              
                 % Rearrange to correct orientation: x, y, slices, dynamics,
-                imageReg = reshape(imageTmp,[dimy,dimx,dimd,dimz]);
-
-                imagesOut = permute(imageReg,[2,1,4,3]);
+                imageReco = reshape(imageReco,[dimy,dimx,dimd,dimz]);
+                imagesOut = permute(imageReco,[2,1,4,3]);
 
                 % Flip dimensions where needed
                 if obj.PHASE_ORIENTATION == 1
@@ -2894,13 +2903,13 @@ classdef proudData
                     for n = 1:param.nouter
                         [recon_cs,param.iteration] = CSL1NlCg(app,recon_cs,param);
                     end
-                    imageTmp = recon_cs;
+                    imageReco = recon_cs;
 
                     % Output reconstructed image
                     if dimd == 1
-                        imagesOut(:,:,slice,:) = imageTmp(:,:,1);
+                        imagesOut(:,:,slice,:) = imageReco(:,:,1);
                     else
-                        imagesOut(:,:,slice,:) = imageTmp;
+                        imagesOut(:,:,slice,:) = imageReco;
                     end
 
                     % Masking of EPI data
@@ -3084,7 +3093,7 @@ classdef proudData
             end
 
             % Sum over coils
-            imagesOut = sum(imagesOut,5);
+            imagesOut = rssq(imagesOut,5);
 
             % Return the images object
             obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
@@ -3142,7 +3151,7 @@ classdef proudData
 
                 kSpace = zeros(dimx,dimy,dimz,dimd,1,1,dims,obj.nrCoils);
                 for i = 1:obj.nrCoils
-                    kSpace(:,:,:,:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
+                    kSpace(:,:,:,:,:,:,:,i) = kSpaceRaw{i};
                 end
 
                 % Bart dimensions
@@ -3166,7 +3175,11 @@ classdef proudData
                 %         Matlab index        1  2  3  4  5  6  7  8  9  10 11 12 13 14
                 kSpacePics = permute(kSpace,[3 ,2 ,1 ,8 ,5 ,6 ,9 ,10,11,12, 4 13 14 7 ]);
 
-                if obj.nrCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                % Select the active coils only
+                nrActiveCoils = nnz(obj.coilActive_flag);
+                kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+
+                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
@@ -3176,13 +3189,14 @@ classdef proudData
 
                 end
 
-                if obj.nrCoils==1 || app.AutoSensitivityCheckBox.Value==0
+                if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                     % Sensitivity correction
                     sensitivities = ones(dimz,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dims);
                     for i = 1:obj.nrCoils
-                        sensitivities(:,:,:,i,:) = sensitivities(:,:,:,i,:)*obj.coilSensitivities(i)*obj.coilActive_flag(i);
+                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
+                    sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
 
                 end
 
@@ -3203,14 +3217,14 @@ classdef proudData
                 if TVd>0
                     picsCommand = [picsCommand, ' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
-                imagesTmp = bart(app,picsCommand,kSpacePics,sensitivities);
+                imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
 
-                % coil sum
-                imagesReg = sum(imagesTmp,[4,5]);
+                % Combination of coils and/or the two ESPIRiT images using root of sum of squares
+                imageReco = bart(app,'rss 24', imageReco);
 
                 % Rearrange to correct orientation: x, y, z, dynamics, slab
-                imagesReg = reshape(imagesReg,[dimz,dimy,dimx,dimd,dims]);
-                imageSlab = permute(imagesReg,[3,2,1,4,5]);
+                imageReco = reshape(imageReco,[dimz,dimy,dimx,dimd,dims]);
+                imageSlab = permute(imageReco,[3,2,1,4,5]);
 
                 % Flip dimensions to correct orientation
                 if obj.PHASE_ORIENTATION == 1
@@ -3546,6 +3560,9 @@ classdef proudData
                     for coil = 1:obj.nrCoils
                         imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kDatai(:,:,:,coil)));
                     end
+
+                    % Sum of squares coil dimension
+                    imageIm = rssq(imageIm,4);
 
                     % Return the image
                     imageSlab(:,:,:,dynamic,slab) = imageIm;

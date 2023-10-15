@@ -1208,11 +1208,13 @@ classdef proudData
                 ':COMBOBOX FFT_DIM1 ',':COMBOBOX FFT_DIM2 ',':COMBOBOX FFT_DIM3 ', ...
                 ':RADIOBUTTON VIEW_ORDER_1',':RADIOBUTTON VIEW_ORDER_2', ...
                 ':EDITTEXT VIEWS_PER_SEGMENT ', ...
-                ':COMBOBOX RECON_METHOD ' ...
+                ':COMBOBOX RECON_METHOD ', ...
+                ':EDITTEXT CHANNEL_COUNT ', ...
+                ':EDITTEXT CHANNEL_WEIGHTS ' ...
                 };
 
             % New parameter values
-            replacepars = {par.NoEchoes,par.NoEchoes, ...
+            replacePars = {par.NoEchoes,par.NoEchoes, ...
                 par.NoExperiments, par.NoExperiments, ...
                 par.NoSamples, par.NoSamples, par.NoSamples, ...
                 par.NoViews, par.NoViews, par.NoViews, ...
@@ -1221,14 +1223,16 @@ classdef proudData
                 par.NoSamples, par.NoViews, par.NoViews2, ...
                 par.View1order, par.View2order, ...
                 par.viewspersegment, ...
-                par.reconmethod ...
+                par.reconmethod, ...
+                par.channelCount, ...
+                par.channelWeights ...
                 };
 
             % Loop over all parameters
             for i = 1:length(parameters)
 
                 txt = parameters{i};
-                var = replacepars{i};
+                var = replacePars{i};
 
                 % Find the position of the parameter name
                 pos = strfind(inputrpr,txt);
@@ -1236,18 +1240,26 @@ classdef proudData
                 if ~isempty(pos)
 
                     if ~isstring(var)
+
                         % Numeric values
-                        oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
+                        oldTxtLength = strfind(inputrpr(pos+length(txt):pos+length(txt)+20),char(13))-1;
+                        if isempty(oldTxtLength)
+                            oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+20),newline)-1;
+                        end
                         newtext = [num2str(var),'     '];
                         newtext = newtext(1:6);
-                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
-
+                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newtext);
+                    
                     else
+
                         % String-based values
-                        oldtxtlength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
+                        oldTxtLength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
+                        if isempty(oldTxtLength)
+                            oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+20),newline)-1;
+                        end
                         newtext = strcat(" ",var,"           ");
                         newtext = extractBefore(newtext,12);
-                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newtext);
 
                     end
 

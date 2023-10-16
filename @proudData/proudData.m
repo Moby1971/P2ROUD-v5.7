@@ -53,6 +53,7 @@ classdef proudData
         nr_repetitions = 1                                  % number of repetitions
         NO_AVERAGES = 1                                     % number of averages
         NO_SLICES = 1                                       % number of slices
+        NO_SLICES_DCM = 1;                                  % number of slices for dicom export
         NO_ECHOES = 1                                       % number of echoes
         nav_on = 0                                          % navigator on (1) / off (0)
         no_navs = 1                                         % number of navigators
@@ -3154,8 +3155,6 @@ classdef proudData
                 dimzo = size(kSpaceRaw{1},3);
                 dimd = app.NREditField.Value;
                 dims = size(kSpaceRaw{1},7);
-
-                disp('*')
 
                 % Resize k-space (kx, ky, kz, dynamics, slab)
                 for i=1:obj.nrCoils

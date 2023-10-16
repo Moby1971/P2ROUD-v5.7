@@ -2575,7 +2575,7 @@ classdef proudData
 
             % Select the active coils only
             nrActiveCoils = nnz(obj.coilActive_flag);
-            kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+            kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
             if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
@@ -2594,7 +2594,7 @@ classdef proudData
                 for i = 1:obj.nrCoils
                     sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                 end
-                sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+                sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
             end
 
@@ -2717,7 +2717,7 @@ classdef proudData
 
                 % Select the active coils only
                 nrActiveCoils = nnz(obj.coilActive_flag);
-                kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+                kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
                 if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
@@ -2736,7 +2736,7 @@ classdef proudData
                     for i = 1:obj.nrCoils
                         sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
-                    sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
      
                 end
 
@@ -3042,7 +3042,7 @@ classdef proudData
                     if obj.halfFourier_flag
                         kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
                         image2D = zeros(dimx,dimy,nnz(obj.coilActive_flag));
-                        imageIn(:,:,:,1) = kdatai(:,:,obj.coilActive_flag);
+                        imageIn(:,:,:,1) = kdatai(:,:,logical(obj.coilActive_flag));
                         image2D(:,:,:) = squeeze(homodyne(imageIn,app));
                     else
                         kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
@@ -3155,6 +3155,8 @@ classdef proudData
                 dimd = app.NREditField.Value;
                 dims = size(kSpaceRaw{1},7);
 
+                disp('*')
+
                 % Resize k-space (kx, ky, kz, dynamics, slab)
                 for i=1:obj.nrCoils
                     kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
@@ -3191,7 +3193,7 @@ classdef proudData
 
                 % Select the active coils only
                 nrActiveCoils = nnz(obj.coilActive_flag);
-                kSpacePics = kSpacePics(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+                kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
                 if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
 
@@ -3210,7 +3212,7 @@ classdef proudData
                     for i = 1:obj.nrCoils
                         sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
-                    sensitivities = sensitivities(:,:,:,obj.coilActive_flag,:,:,:,:,:,:,:,:,:,:);
+                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
                 end
 

@@ -15,6 +15,7 @@ classdef proudData
         mrdKspace = []                                      % k-space data from MRD file
         images = []                                         % magnitude images
         complexImages = []                                  % complex images
+        sensitivityMaps = {}                                % sensitivity maps
         phaseImages = []                                    % phase images
         phaseImagesOrig = []                                % original phase images (without unwrapping)
         flowImages = []                                     % flow images
@@ -30,6 +31,9 @@ classdef proudData
         newRprFile;                                         % new RPR file data for export
         totalVariation = 'T'                                % total variation  (T) or total generalized variation (G)
         memSize                                             % for testing testing memory size
+        maxKspace = 16384                                   % max k-space value
+        maxImage = 16384                                    % max image value
+        maxCoils = 8                                        % max number of coils
 
         % Filenames
         filename;
@@ -206,6 +210,7 @@ classdef proudData
     % obj = Reco2DRadialNUFFT(obj,app,flipAngle,echoTime)
     % obj = unRing(obj,app)
     % obj = scaleImages(obj)
+    % obj = scaleKspace(obj)
     % obj = calcPixelSize(obj,app)
     % obj = backToKspace(obj)
     % obj = recoSurFiles(obj, surpath, suffix, mrdfilename, rprfilename)
@@ -351,8 +356,9 @@ classdef proudData
             obj.retroRecoScan_flag = false;
             obj.validFile_flag = true;
 
-            obj.rawKspace = {};    % raw k-space data already (pre-)sorted by importMRD function
-            obj.unsKspace = {};    % unsorted k-space data
+            obj.rawKspace = {};         % raw k-space data already (pre-)sorted by importMRD function
+            obj.unsKspace = {};         % unsorted k-space data
+            obj.sensitivityMaps = {};   % sensitivity maps
 
             % Loop over all coils
             for i=1:obj.nrCoils
@@ -2583,20 +2589,46 @@ classdef proudData
                 % ESPIRiT reconstruction
                 TextMessage(app,'ESPIRiT reconstruction ...');
 
-                % Calculate coil sensitivity maps with ecalib bart function
-                sensitivities = bart(app,'ecalib -S -I -a', kSpacePics);      % ecalib with softsense
+                % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
+                for slice = 1:size(kSpacePics,14)
+                    for dynamic = 1:size(kSpacePics,11)
+                        app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice),", dynamic ",num2str(dynamic)," ..."));
+                        sensitivities(1,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice));
+                    end
+                end
 
             end
 
             if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                 % Sensitivity correction
-                sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,1,1,1,dimz);
+                sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dimz);
                 for i = 1:obj.nrCoils
                     sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                 end
                 sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
 
+            end
+
+            % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, echo-time ...
+            sensemap = permute(abs(sensitivities),[3 2 14 11 4 1 5 6 7 8 9 10 12 13 15]);
+            sensemap = sensemap/max(sensemap(:));
+            sensemap = flip(sensemap,2);
+            if obj.PHASE_ORIENTATION == 0
+                sensemap = flip(sensemap,1);
+            end
+            cnt = 1;
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    for echoTime = 1:dimte
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1,1,1,1,1,1,1,1,1,1);
+                    end
+                    cnt = cnt + 1;
+                else
+                    for echoTime = 1:dimte
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                    end
+                end
             end
 
             % Pics reconstuction
@@ -2725,15 +2757,20 @@ classdef proudData
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
-                    % Calculate coil sensitivity maps with ecalib bart function
-                    sensitivities = bart(app,'ecalib -S -I -a -m2', kSpacePics);      % ecalib with softsense
+                    % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
+                    for slice = 1:dimz
+                        for dynamic = 1:dimd
+                            app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice),", dynamic ",num2str(dynamic)," ..."));
+                            sensitivities(1,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice));
+                        end
+                    end
 
                 end
 
                 if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                     % Sensitivity correction
-                    sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,1,1,1,dimz);
+                    sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dimz,1);
                     for i = 1:obj.nrCoils
                         sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
@@ -2741,7 +2778,25 @@ classdef proudData
      
                 end
 
-                % Pics reconstuction
+                % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, echo-time ...
+                sensemap = permute(abs(sensitivities),[3 2 14 11 4 1 5 6 7 8 9 10 12 13 15]);
+                sensemap = sensemap/max(sensemap(:));
+                sensemap = flip(sensemap,2);
+
+                if obj.PHASE_ORIENTATION == 0
+                    sensemap = flip(sensemap,1);
+                end
+                cnt = 1;
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1,1,1,1,1,1,1,1,1,1);
+                        cnt = cnt + 1;
+                    else
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                    end
+                end
+
+                % Pics reconstruction
                 picsCommand = 'pics -S';
                 if LW>0
                     picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
@@ -2758,20 +2813,27 @@ classdef proudData
                 if TVd>0
                     picsCommand = [picsCommand,' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
-                imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+
+                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                    for slice = 1:size(kSpacePics,14)
+                        for dynamic = 1:size(kSpacePics,11)
+                            imageReco = bart(app,picsCommand,kSpacePics,sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:));      
+                        end
+                    end
+                else
+                    imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+                end
 
                 % Combination of coils and/or the two ESPIRiT images using root of sum of squares
                 imageReco = bart(app,'rss 24', imageReco);
               
                 % Rearrange to correct orientation: x, y, slices, dynamics,
-                imageReco = reshape(imageReco,[dimy,dimx,dimd,dimz]);
-                imagesOut = permute(imageReco,[2,1,4,3]);
+                imagesOut = permute(imageReco,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
                 % Flip dimensions where needed
-                if obj.PHASE_ORIENTATION == 1
-                    imagesOut = flip(imagesOut,2);
-                else
-                    imagesOut = flip(flip(imagesOut,2),1);
+                imagesOut = flip(imagesOut,2);
+                if obj.PHASE_ORIENTATION == 0
+                    imagesOut = flip(imagesOut,1);
                 end
 
                 % Masking of EPI data
@@ -2783,7 +2845,7 @@ classdef proudData
                     end
                     imagesOut = imagesOut.*flip(msk,2);
                 end
-
+ 
                 % Return the images object
                 obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
                 obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
@@ -2946,6 +3008,15 @@ classdef proudData
                 imagesOut = circshift(imagesOut,-1,2);
                 imagesOut = circshift(imagesOut,1,1);
 
+                % Fake coil sensitivities
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imagesOut));
+                    else
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imagesOut));
+                    end
+                end
+             
                 % Return the images object
                 obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
                 obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
@@ -3110,6 +3181,15 @@ classdef proudData
             % Sum over coils
             imagesOut = rssq(imagesOut,5);
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imagesOut));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imagesOut));
+                end
+            end
+           
             % Return the images object
             obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
             obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
@@ -3199,22 +3279,45 @@ classdef proudData
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
-                    % ESPIRiT sensitivity maps
-                    sensitivities = bart(app,'ecalib -I -S -m2', kSpacePics);
+                   % Calculate coil sensitivity maps with ecalib bart function, per slab, per dynamic
+                    for slab = 1:dims
+                        for dynamic = 1:dimd
+                            app.TextMessage(strcat("Ecalib coil sensitivity estimation, slab ",num2str(slab),", dynamic ",num2str(dynamic)," ..."));
+                            sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:));
+                        end
+                    end
 
                 end
 
                 if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
 
                     % Sensitivity correction
-                    sensitivities = ones(dimz,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dims);
+                    sensitivities = ones(dimz,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dims,1);
                     for i = 1:obj.nrCoils
-                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
+                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
                     end
-                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
+                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:,:);
 
                 end
 
+                % Construct the sensitivity maps for the app {coil} x, y, z, dynamics, slab, 1 ...
+                sensemap = permute(abs(sensitivities),[3 2 1 11 4 14 5 6 7 8 9 10 12 13 15]);
+                sensemap = sensemap/max(sensemap(:));
+                if obj.PHASE_ORIENTATION == 1
+                    sensemap = flip(flip(sensemap,3),2);
+                else
+                    sensemap = flip(flip(flip(sensemap,3),2),1);
+                end
+                cnt = 1;
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1); % slab 1 only for now
+                        cnt = cnt + 1;
+                    else
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1)));
+                    end
+                end
+               
                 % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7, total variation in time 2^10 = 1024
                 picsCommand = 'pics -S';
                 if LambdaWavelet>0
@@ -3232,7 +3335,17 @@ classdef proudData
                 if TVd>0
                     picsCommand = [picsCommand, ' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
-                imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+
+                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                    for dynamic = 1:dimd
+                        for slab = 1:dims
+                            app.TextMessage(strcat("PICS reconstruction, slab ",num2str(slab),", dynamic ",num2str(dynamic)," ..."));
+                            imageReco(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:) = bart(app,picsCommand,kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:),sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:));
+                        end
+                    end
+                else
+                    imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+                end
 
                 % Combination of coils and/or the two ESPIRiT images using root of sum of squares
                 imageReco = bart(app,'rss 24', imageReco);
@@ -3467,6 +3580,15 @@ classdef proudData
 
                 end
 
+                % Fake coil sensitivities
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageMultiSlabOutput));
+                    else
+                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageMultiSlabOutput));
+                    end
+                end
+              
                 % Return the image objects
                 obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
                 obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
@@ -3644,6 +3766,15 @@ classdef proudData
 
             end
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageMultiSlabOutput));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageMultiSlabOutput));
+                end
+            end
+        
             % Return the image objects
             obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
             obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
@@ -4054,6 +4185,15 @@ classdef proudData
                 imageOut = flip(flip(imageOut,2),1);
             end
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageOut));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageOut));
+                end
+            end
+       
             % Return the image objects
             obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
             obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
@@ -4187,6 +4327,15 @@ classdef proudData
                 imageOut = flip(flip(imageOut,2),1);
             end
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageOut));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageOut));
+                end
+            end
+        
             % Return the image objects
             obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
             obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
@@ -4548,6 +4697,15 @@ classdef proudData
                 imageOut = flip(flip(recoImage,3),1);
             end
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = ones(size(imageOut));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = zeros(size(imageOut));
+                end
+            end
+      
             % Return the image objects
             obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
             obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
@@ -4670,6 +4828,15 @@ classdef proudData
                 imageOut = flip(flip(imageOut,3),1);
             end
 
+            % Fake coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = ones(size(imageOut));
+                else
+                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = zeros(size(imageOut));
+                end
+            end
+      
             % Return the image objects
             obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
             obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
@@ -4818,9 +4985,31 @@ classdef proudData
         function obj = scaleImages(obj)
 
             % Scale
-            obj.images = round(4095*obj.images/max(obj.images(:)));
+            obj.images = round(obj.maxImage*obj.images/max(obj.images(:)));
             obj.images(isnan(obj.images)) = 0;
             obj.images(isinf(obj.images)) = 0;
+
+        end % scaleImages
+
+
+
+
+        % ---------------------------------------------------------------------------------
+        % Scale k-space
+        % ---------------------------------------------------------------------------------
+        function obj = scaleKspace(obj)
+
+            % Determine max abs(kSpace) value
+            mx1 = zeros(obj.nrCoils,1);
+            for i=1:obj.nrCoils
+                mx1(i) = max(abs(obj.rawKspace{i}(:)));
+            end
+            mx = double(round(max(mx1(:))));
+
+            % Scale
+            for i=1:obj.nrCoils
+                obj.rawKspace{i} = obj.maxKspace*obj.rawKspace{i}/mx;
+            end
 
         end % scaleImages
 

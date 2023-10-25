@@ -8,11 +8,8 @@ function folderName = exportDicomDCM(app, dcmdir)
 % Proud data parameters object
 obj = app.pd;
 
-
-
 directory = app.dicomExportPath;
 image = obj.images;
-
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1
@@ -34,12 +31,17 @@ dcmFilename = [listing(1).folder,filesep,listing(1).name];
 baseHeader = dicominfo(dcmFilename);
 app.TextMessage(strcat('Reading DICOM info from',{' '},dcmFilename));
 
-% create folder if not exist, and delete folder content
-folderName = strcat(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'P',num2str(dimd));
-if (~exist(folderName, 'dir'))
-    mkdir(folderName);
+% Create new directory
+ready = false;
+cnt = 1;
+while ~ready
+    folderName = strcat(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'P',num2str(dimd),filesep,num2str(cnt),filesep);
+    if ~exist(folderName, 'dir')
+        mkdir(folderName);
+        ready = true;
+    end
+    cnt = cnt + 1;
 end
-delete(strcat(folderName,filesep,'*'));
 
 % export the dicom images
 fileCounter = 0;

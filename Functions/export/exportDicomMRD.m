@@ -13,12 +13,17 @@ obj = app.pd;
 directory = app.dicomExportPath;
 image = obj.images;
 
-% Create folder if not exist, and clear
-folderName = strcat(directory,filesep,tag,'P');
-if (~exist(folderName, 'dir'))
-    mkdir(folderName); 
+% Create new directory
+ready = false;
+cnt = 1;
+while ~ready
+    folderName = strcat(directory,filesep,tag,'P',filesep,filesep,num2str(cnt),filesep);
+    if ~exist(folderName, 'dir')
+        mkdir(folderName);
+        ready = true;
+    end
+    cnt = cnt + 1;
 end
-delete(strcat(folderName,filesep,'*'));
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1

@@ -10,16 +10,19 @@ obj = app.pd;
 % Input images
 gifImages = obj.images;
 
-% Export folder
-folderName = strcat(app.gifExportPath,filesep,"GIF",filesep,"P2ROUD_GIFS_",app.tag,filesep);
-folderName = strrep(folderName,strcat(filesep,filesep),filesep);
-
-app.TextMessage(strcat("Gif export directory = ",folderName));
-
-% Create folder if not exist
-if (~exist(folderName, 'dir')) 
-    mkdir(folderName); 
+% Create new directory
+ready = false;
+cnt = 1;
+while ~ready
+    folderName = strcat(app.gifExportPath,filesep,"GIF",filesep,"P2ROUD_GIFS_",app.tag,filesep,num2str(cnt),filesep);
+    if ~exist(folderName, 'dir')
+        mkdir(folderName);
+        ready = true;
+    end
+    cnt = cnt + 1;
 end
+
+app.TextMessage(strcat("GIF export folder = ",folderName));
 
 % Phase orientation
 if obj.PHASE_ORIENTATION == 1

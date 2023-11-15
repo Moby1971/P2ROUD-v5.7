@@ -1,4 +1,4 @@
-function [x, iter] = CSL1NlCg(app,x0,param)
+function x = CSL1NlCg(x0,param)
 
 % res = CSL1NlCg(param)
 %
@@ -19,7 +19,7 @@ alpha = 0.01;
 beta = 0.6;
 t0 = 1;
 
-gradToll = 1e-3 ;
+gradToll = 1e-3 ; %#ok<NASGU>
 param.l1Smooth = 1e-15;
 
 % compute g0  = grad(f(x))
@@ -54,14 +54,7 @@ for k=1:param.nite
     g0 = g1;
     dx = -g1+bk*dx;
 
-    % progress
-    param.iteration = param.iteration + 1;
-    app.RecoProgressGauge.Value = round(100 * (param.iteration-1)/param.totaliterations);
-    drawnow;
-
 end
-
-iter = param.iteration;
 
 end
 

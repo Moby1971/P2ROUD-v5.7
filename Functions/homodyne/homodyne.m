@@ -1,6 +1,5 @@
-function [image, phase] = homodyne(kSpace, app)
-%[image phase] = homodyne(kspace,varargin)
-%
+function [image, phase] = homodyne(app, kSpace, method)
+
 % Partial Fourier reconstruction for 2D or 3D datasets.
 % Leave k-space zeroed where unsampled so the code can
 % figure out the sampling automatically.
@@ -15,9 +14,9 @@ function [image, phase] = homodyne(kSpace, app)
 % -opts.method ('homodyne','pocs','least-squares','compressed-sensing')
 % -opts.window ('step','ramp','quad','cube','quartic')
 
-%% options
+% options
 
-opts.method = 'homodyne'; % 'homodyne','pocs','least-squares','compressed-sensing'
+opts.method = method; % 'homodyne','pocs','least-squares','compressed-sensing','none'
 opts.window = 'cubic'; % 'step','ramp','quad','cubic','quartic'
 opts.removeOS = 0; % remove 2x oversampling in specified dimension (0=off)
 
@@ -42,7 +41,7 @@ end
 if nc>1
 
     for c = 1:nc
-        [image(:,:,:,c), phase(:,:,:,c)] = homodyne(kSpace(:,:,:,c),app); %#ok<*AGROW> 
+        [image(:,:,:,c), phase(:,:,:,c)] = homodyne(app,kSpace(:,:,:,c),opts.method); %#ok<*AGROW> 
     end
     
     sz = size(kSpace); 
@@ -61,7 +60,7 @@ else
     kz = find(any(any(mask,1),2));
     
     if any(diff(kx)~=1) || any(diff(ky)~=1) || any(diff(kz)~=1)
-        app.TextMessage('K-space not centered or not contiguous ...');
+       % app.TextMessage('K-space not centered or not contiguous ...');
     end
     
     % fraction of sampling in kx, ky, kz
@@ -70,19 +69,19 @@ else
     
     % some checks
     [~,dim] = min(f);
-    % fprintf('partial sampling: [%s]. Using dimension %i.\n',num2str(f,'%.2f '),dim);
+    %fprintf('partial sampling: [%s]. Using dimension %i.\n',num2str(f,'%.2f '),dim);
     
-    if min(f<0.5)
-        app.TextMessage('K-space is too undersampled - must be at least 0.5 ...');
+    if min(f<0.1)
+        app.TextMessage('K-space is too undersampled - must be at least 0.1 ...');
     end
     
     if all(f>0.95)
-        app.TextMessage('K-space is fully sampled - skipping homodyne');
+        % app.TextMessage('K-space is fully sampled - skipping homodyne');
         opts.method = 'none'; % fully sampled - bypass recon
     end
     
     %% set up filters
-    
+
     if ~isequal(opts.method,'none')
         
         if dim==1; H = zeros(nx,1,1); index = kx; end
@@ -134,6 +133,8 @@ else
             image = bsxfun(@times,H,kSpace);
             image = ifftn(ifftshift(image)).*exp(-1i*phase);
             image = abs(real(image));
+            image = fftshift(image);
+            phase = fftshift(phase);
             
         case 'pocs'
             
@@ -168,9 +169,16 @@ else
             
         case 'none'
             
-            tmp = ifftn(kSpace);
-            image = abs(tmp);
-            phase = angle(tmp);
+            % Gustav Strijkers
+            
+            x = kSpace;
+
+            X = fftshift(ifft(fftshift(x,1),[],1),1)*sqrt(size(x,1));
+            X = fftshift(ifft(fftshift(X,2),[],2),2)*sqrt(size(x,2));
+            X = fftshift(ifft(fftshift(X,3),[],3),3)*sqrt(size(x,3));
+
+            image = abs(X);
+            phase = angle(X);
             
         otherwise
             
@@ -178,8 +186,6 @@ else
             
     end
 
-    image = fftshift(image);
-    phase = fftshift(phase);
     
     if opts.removeOS
 

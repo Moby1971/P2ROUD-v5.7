@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % Oct 2023
+    % Nov 2023
     %
 
     properties
@@ -34,6 +34,8 @@ classdef proudData
         maxKspace = 16384                                   % max k-space value
         maxImage = 16384                                    % max image value
         maxCoils = 8                                        % max number of coils
+        tukeyFilterWidth = 0.1                              % k-space Tukey filter width
+        coilSensitivityCalibSize = 8                        % coil sensitivity k-space calibration size
 
         % Filenames
         filename;
@@ -76,17 +78,17 @@ classdef proudData
         PHASE_ORIENTATION = 0                               % phase orientation 1 = hor. 0 = vert.
         FOVf = 8                                            % field-of-view factor aspect ratio = FOVf/8
         aspectratio = 1                                     % image aspect ratio
-        alpha = 20                                          % flip angle
-        te = 2                                              % integer echo time (ms)
-        te_us = 0                                           % additional echo time (us)
-        TE                                                  % echo time TE = te + te_us
+        alpha = 20                                          % flip-angle
+        te = 2                                              % integer echo-time (ms)
+        te_us = 0                                           % additional echo-time (us)
+        TE                                                  % echo-time TE = te + te_us
         tr = 10                                             % integer TR time (ms)
         tr_extra_us = 0                                     % additional TR time (us)
         TR                                                  % repitition time TR = tr + tr_extra_us
         ti = 1000                                           % inversion time
-        VFA_angles = []                                     % MRD file flip angles
-        VFA_size = 0                                        % flip angle array size (0 = no array = 1 flip angle)
-        flipAngleArray = []                                 % array of flip angles
+        VFA_angles = []                                     % MRD file flip-angles
+        VFA_size = 0                                        % flip-angle array size (0 = no array = 1 flip-angle)
+        flipAngleArray = []                                 % array of flip-angles
         frame_loop_on = 0                                   % CINE imaging on (1) / off (0)
         radial_on = 0                                       % radial scanning on (1) / off (0)
         slice_nav = 0                                       % slice navigator on (1) / off (0)
@@ -133,7 +135,7 @@ classdef proudData
         validMask_flag = false                              % valid mask true/false
         multiEchoes_flag = false                            % multiple echoes true/false
         multiRepetitions_flag = false                       % multiple repetitions true/false
-        multiFlipAngles_flag = false                        % multiple flip angles true/false
+        multiFlipAngles_flag = false                        % multiple flip-angles true/false
         multiCoil_flag = false                              % multiple receiver coils true/false
         multiSlab_flag = false                              % multiple 3D slabs true/false
         halfFourier_flag = false                            % half Fourier imaging
@@ -201,6 +203,7 @@ classdef proudData
     % obj = sort3DProudKspaceMRD(obj, app)
     % obj = chopNav(obj)
     % obj = applyTukey(obj)
+    % obj = estimateCoilSensitivies(obj, app)
     % obj = csReco2DCine(obj,app,flipAngle)
     % obj = csReco2D(obj,app,flipAngle,echoTime)
     % obj = fftReco2D(obj,app,flipAngle,echoTime)
@@ -246,17 +249,18 @@ classdef proudData
     % x = ifft2Dmri(X)
     % traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
     % imOut = image2Dshift(imIn, xShift, yShift)
+    % outputMatrix = matrixInterpolate(inputMatrix, scaling, varargin)
     %
     %
     %
     %
     % ----------------------------------------------------------------------
-    % Methods, GUI elements & variables from the P2ROUD app 
+    % Methods, GUI elements & variables from the P2ROUD app
     % that are used in the class
     % ----------------------------------------------------------------------
     %
     % app.TextMessage
-    % app.SetStatus    
+    % app.SetStatus
     %
     % app.OrientationSpinner.Value
     % app.SlabOverlapEditField.Value
@@ -1256,7 +1260,7 @@ classdef proudData
                         newtext = [num2str(var),'     '];
                         newtext = newtext(1:6);
                         inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newtext);
-                    
+
                     else
 
                         % String-based values
@@ -1421,12 +1425,13 @@ classdef proudData
                 app.TextMessage('Radial data detected ...');
             end
 
-            % More than 1 flip angle
+            % More than 1 flip-angle
             flipAngles = obj.alpha;
             if obj.VFA_size > 0
                 obj.multiFlipAngles_flag = true;
+                obj.setVariableFlipAngles;
                 flipAngles = obj.VFA_angles(1:obj.VFA_size);
-                app.TextMessage('Multi-flip angle data detected ...');
+                app.TextMessage('Multi-flip-angle data detected ...');
             end
             obj.flipAngleArray = flipAngles;
 
@@ -1439,7 +1444,7 @@ classdef proudData
             % More than 1 repetition
             if obj.EXPERIMENT_ARRAY > 1
                 if obj.multiFlipAngles_flag
-                    % Multiple repetitions = multiple flip angles
+                    % Multiple repetitions = multiple flip-angles
                     obj.EXPERIMENT_ARRAY = obj.EXPERIMENT_ARRAY/obj.VFA_size;
                 end
                 if obj.EXPERIMENT_ARRAY > 1
@@ -1461,13 +1466,42 @@ classdef proudData
 
 
         % ---------------------------------------------------------------------------------
+        % Set the variable flip angles, sort the angles in groups
+        % ---------------------------------------------------------------------------------
+        function obj = setVariableFlipAngles(obj)
+
+            % The different flip angles in a variable flip-angle experiment can be ordered in different ways
+            % Here they are sorted, such that they can be combined
+            a = obj.VFA_size;
+            b = unique(obj.VFA_angles(1:obj.VFA_size),'Stable');
+            c = length(b);
+            d = obj.VFA_angles(1:obj.VFA_size);
+            if a == c
+                nrFlipAngles = a;     % FA1, FA2, FA3, FA4, .... = dyn1, dyn2, dyn3, dyn4, ...
+                lsFlipAngles = b;
+            elseif mod(a,c) == 0
+                nrFlipAngles = c;     % FA1, FA1, ..., FA2, FA2, ..., FA3, FA3, ... = dyn1, dyn2, dyn3, dyn4, ...
+                lsFlipAngles = b;
+            else
+                nrFlipAngles = a;     % Each dynamic has its own flip-angle
+                lsFlipAngles = d;
+            end
+            obj.VFA_size = nrFlipAngles;
+            obj.VFA_angles = lsFlipAngles;
+
+        end % setVariableFlipAngles
+
+
+
+
+        % ---------------------------------------------------------------------------------
         % Permute 3D k-space data
         % ---------------------------------------------------------------------------------
         function obj = permute3Dkspace(obj)
 
             % The P2ROUD app sorts the 3D data and images into the following order:
             %
-            % data = X, Y, Z, dynamics, flip-angles, echoes, slabs
+            % data = X, Y, Z, dynamics, flip-angles, echo-times, slabs
             %
             % -----------------------------------------------------------------------------
 
@@ -1475,46 +1509,46 @@ classdef proudData
 
                 case "3D"
 
-                    for i = 1:obj.nrCoils
+                    for coil = 1:obj.nrCoils
 
-                        switch ndims(obj.rawKspace{i})
+                        switch ndims(obj.rawKspace{coil})
 
                             case 3
-                                obj.rawKspace{i} = permute(obj.rawKspace{i},[3,1,2]);
+                                obj.rawKspace{coil} = permute(obj.rawKspace{coil},[3,1,2]);
 
                             case 4
-                                obj.rawKspace{i} = permute(obj.rawKspace{i},[4,2,3,1]);
+                                obj.rawKspace{coil} = permute(obj.rawKspace{coil},[4,2,3,1]);
 
                             case 5
-                                obj.rawKspace{i} = permute(obj.rawKspace{i},[5,3,4,1,2]);
+                                obj.rawKspace{coil} = permute(obj.rawKspace{coil},[5,3,4,1,2]);
 
                             case 6
-                                obj.rawKspace{i} = permute(obj.rawKspace{i},[6,4,5,1,2,3]);
+                                obj.rawKspace{coil} = permute(obj.rawKspace{coil},[6,4,5,1,2,3]);
 
                         end
 
                     end
 
                     % Permute data to (X, Y, Z, NR, NFA, NE, SLAB)    ---- NOT FULLY TESTED -----
-                    for i = 1:obj.nrCoils
+                    for coil = 1:obj.nrCoils
 
-                        if ndims(obj.rawKspace{i})==4 && obj.multiFlipAngles_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,4,6,7]);
+                        if ndims(obj.rawKspace{coil})==4 && obj.multiFlipAngles_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,4,6,7]);
                         end
-                        if ndims(obj.rawKspace{i})==4 && obj.multiEchoes_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,4,7]);
+                        if ndims(obj.rawKspace{coil})==4 && obj.multiEchoes_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,6,4,7]);
                         end
-                        if ndims(obj.rawKspace{i})==4 && obj.multiSlab_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,7,4]);
+                        if ndims(obj.rawKspace{coil})==4 && obj.multiSlab_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,6,7,4]);
                         end
-                        if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,6,4,5,7]);
+                        if ndims(obj.rawKspace{coil})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,6,4,5,7]);
                         end
-                        if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,6,5,7]);
+                        if ndims(obj.rawKspace{coil})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,4,6,5,7]);
                         end
-                        if ndims(obj.rawKspace{i})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,5,6,7]);
+                        if ndims(obj.rawKspace{coil})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,4,5,6,7]);
                         end
 
                     end
@@ -1522,9 +1556,9 @@ classdef proudData
                     % Flip odd echoes for multi-echo T2*
                     if contains(obj.PPL,'flash') && ~(obj.retroRecoScan_flag == true || obj.proudRecoScan_flag == true)
                         if obj.NO_ECHOES > 1
-                            for j = 2:2:obj.NO_ECHOES
-                                for i = 1:obj.nrCoils
-                                    obj.rawKspace{i}(:,:,:,:,:,j,:) = flip(obj.rawKspace{i}(:,:,:,:,:,j,:),1);
+                            for echo = 2:2:obj.NO_ECHOES
+                                for coil = 1:obj.nrCoils
+                                    obj.rawKspace{coil}(:,:,:,:,:,echo,:) = flip(obj.rawKspace{coil}(:,:,:,:,:,echo,:),1);
                                 end
                             end
                         end
@@ -1533,10 +1567,8 @@ classdef proudData
 
                 case "3Dute"
 
-                    for i = 1:obj.nrCoils
-
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[2,1]);
-
+                    for coil = 1:obj.nrCoils
+                        obj.rawKspace{coil} = permute(obj.rawKspace{coil},[2,1]);
                     end
 
                     obj.NO_SAMPLES = size(obj.rawKspace{1},1);
@@ -1550,7 +1582,7 @@ classdef proudData
                     obj.trajType = "3Dute";
 
             end
-
+     
         end % permute3DKspace
 
 
@@ -1561,39 +1593,41 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = permute2Dkspace(obj)
 
-            for i=1:obj.nrCoils
+            dimC = obj.nrCoils;
 
-                switch ndims(obj.rawKspace{i})
+            for coil = 1:dimC
+
+                switch ndims(obj.rawKspace{coil})
 
                     case 2
-                        obj.rawKspace{i} = permute(obj.rawKspace{i},[2,1]);
+                        obj.rawKspace{coil} = permute(obj.rawKspace{coil},[2,1]);
 
                     case 3
                         if obj.NO_SLICES > 1
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[3,2,1]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[3,2,1]);
                         else
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[3,2,4,1]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[3,2,4,1]);
                         end
 
                     case 4
                         if obj.NO_SLICES > 1
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,2,1]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[4,3,2,1]);
                         else
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[4,3,5,1,2]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[4,3,5,1,2]);
                         end
 
                     case 5
                         if obj.NO_SLICES > 1
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[5,4,3,1,2]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[5,4,3,1,2]);
                         else
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[5,4,6,1,2,3]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[5,4,6,1,2,3]);
                         end
 
                     case 6
                         if obj.NO_SLICES > 1
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[6,5,4,1,2,3]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[6,5,4,1,2,3]);
                         else
-                            obj.rawKspace{i} = permute(obj.rawKspace{i},[6,5,7,1,2,3,4]);
+                            obj.rawKspace{coil} = permute(obj.rawKspace{coil},[6,5,7,1,2,3,4]);
                         end
 
                 end
@@ -1601,22 +1635,26 @@ classdef proudData
             end
 
             % Permute data to (X, Y, Z, NR, NFA, NE)    ---- NOT FULLY TESTED -----
-            for i=1:obj.nrCoils
+            if obj.VFA_size > 1
+                obj.nr_repetitions = obj.nr_repetitions/obj.VFA_size;
+            end
+            for coil = 1:dimC
 
-                if ndims(obj.rawKspace{i})==4 && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,4,6]);
+                if ndims(obj.rawKspace{coil})==4 && obj.multiFlipAngles_flag
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,4,6]);
                 end
-                if ndims(obj.rawKspace{i})==4 && obj.multiEchoes_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,5,6,4]);
+                if ndims(obj.rawKspace{coil})==4 && obj.multiEchoes_flag
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,6,4]);
                 end
-                if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,6,4,5]);
+                if ndims(obj.rawKspace{coil})==5 && obj.multiEchoes_flag && obj.multiFlipAngles_flag
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,6,4,5]);
                 end
-                if ndims(obj.rawKspace{i})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,6,5]);
+                if ndims(obj.rawKspace{coil})==5 && obj.multiEchoes_flag && obj.multiRepetitions_flag
+                    obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,4,6,5]);
                 end
-                if ndims(obj.rawKspace{i})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
-                    obj.rawKspace{i} = permute(obj.rawKspace{i},[1,2,3,4,5,6]);
+                if ndims(obj.rawKspace{coil})==5 && obj.multiRepetitions_flag && obj.multiFlipAngles_flag
+                    [dimx,dimy,dimz,~,~,dime] = size(obj.rawKspace{coil});
+                    obj.rawKspace{coil} = reshape(obj.rawKspace{coil},[dimx,dimy,dimz,obj.nr_repetitions,obj.VFA_size,dime]);
                 end
 
             end
@@ -1624,9 +1662,9 @@ classdef proudData
             % Flip odd echoes for multi-echo T2*
             if contains(obj.PPL,'flash') && ~(obj.retroRecoScan_flag == true || obj.proudRecoScan_flag == true || obj.frame_loop_on == true)
                 if obj.NO_ECHOES > 1
-                    for j = 2:2:obj.NO_ECHOES
-                        for i = 1:obj.nrCoils
-                            obj.rawKspace{i}(:,:,:,:,:,j) = flip(obj.rawKspace{i}(:,:,:,:,:,j),1);
+                    for echo = 2:2:obj.NO_ECHOES
+                        for coil = 1:dimC
+                            obj.rawKspace{coil}(:,:,:,:,:,echo) = flip(obj.rawKspace{coil}(:,:,:,:,:,echo),1);
                         end
                     end
                 end
@@ -1634,11 +1672,11 @@ classdef proudData
 
             % EPI // Under construction //
             if obj.dataType == "2Depi"
-                for i = 1:obj.nrCoils
-                    obj.rawKspace{i} = reshape(obj.rawKspace{i},[obj.NO_SAMPLES,obj.NO_VIEWS,obj.NO_SLICES,obj.nr_repetitions]);
+                for coil = 1:dimC
+                    obj.rawKspace{coil} = reshape(obj.rawKspace{coil},[obj.NO_SAMPLES,obj.NO_VIEWS,obj.NO_SLICES,obj.nr_repetitions]);
                 end
             end
-
+      
         end % permute2DKspace
 
 
@@ -1750,7 +1788,7 @@ classdef proudData
                 end
 
                 obj.rawKspace{coil} = kSpace;
-
+      
             end
 
             % Trajectory
@@ -2024,7 +2062,7 @@ classdef proudData
             dimz = obj.NO_VIEWS_2;
             nRep = obj.EXPERIMENT_ARRAY;                % Number of acquired repetitions/dynamics
             nDyn = app.NREditField.Value;               % Number of reconstructed dynamics
-            nFA = app.NFAViewField.Value;               % Number of flip angles
+            nFA = app.NFAViewField.Value;               % Number of flip-angles
             arrayLength = obj.NO_VIEWS_ORIG*dimz;
 
             % For multiple flip-angles
@@ -2194,8 +2232,8 @@ classdef proudData
             dimz = obj.NO_VIEWS_2;
             nRep = obj.EXPERIMENT_ARRAY;        % Number of acquired dynamics
             nDyn = app.NREditField.Value;       % Number of reconstructed dynamics
-            nTE = app.NEViewField.Value;        % Number of echo times
-            nFA = app.NFAViewField.Value;       % Number of flip angles
+            nTE = app.NEViewField.Value;        % Number of echo-times
+            nFA = app.NFAViewField.Value;       % Number of flip-angles
             mtx = dimy*dimz*dimx;
 
 
@@ -2373,7 +2411,7 @@ classdef proudData
                 dynamic = dynamic + 1;
                 app.TextMessage(strcat("Ghost corrections dynamic ",num2str(dynamic)," ..."));
                 slice = 0;
-                while (slice<dimz) && ~app.stopReco_flag 
+                while (slice<dimz) && ~app.stopReco_flag
                     slice = slice + 1;
                     for coil = 1:dimc
                         kSpaceGhost = squeeze(kSpace(:,:,slice,dynamic,coil));
@@ -2440,7 +2478,7 @@ classdef proudData
 
                 app.TextMessage(ME.message);
                 app.TextMessage('Warning: something went wrong during EPI mask construction ...');
-            
+
             end
 
         end % epiCorr
@@ -2454,17 +2492,17 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = applyTukey(obj)
 
-            filterWidth = 0.1;
+            obj.tukeyFilterWidth = 0.1;
             dimx = size(obj.rawKspace{1},1);
             dimy = size(obj.rawKspace{1},2);
             dimz = size(obj.rawKspace{1},3);
 
             % Normalize k-space to convenient range
-            for i = 1:obj.nrCoils
-                m(i) = max(abs(obj.rawKspace{i}(:)));
+            for coil = 1:obj.nrCoils
+                maxPerCoil(coil) = max(abs(obj.rawKspace{coil}(:)));
             end
-            for i = 1:obj.nrCoils
-                obj.rawKspace{i} = 16383*obj.rawKspace{i}/max(m);
+            for coil = 1:obj.nrCoils
+                obj.rawKspace{coil} = obj.maxKspace*obj.rawKspace{coil}/max(maxPerCoil);
             end
 
             if ~obj.halfFourier_flag
@@ -2474,43 +2512,30 @@ classdef proudData
                     case {"2D","2Depi"}
 
                         kSpaceSum = zeros(dimx,dimy);
-                        for i = 1:obj.nrCoils
-                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[3 4 5 6 7 8]));
+                        for coil = 1:obj.nrCoils
+                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{coil},[3 4 5 6 7 8]));
                         end
                         [row, col] = find(ismember(kSpaceSum, max(kSpaceSum(:))));
-                        for i = 1:obj.nrCoils
-                            flt = proudData.circTukey2D(dimx,dimy,row,col,filterWidth);
+                        for coil = 1:obj.nrCoils
+                            flt = proudData.circTukey2D(dimx,dimy,row,col,obj.tukeyFilterWidth);
                             tukeyFilter(:,:,1,1,1,1) = flt;
-                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                            obj.rawKspace{coil} = obj.rawKspace{coil}.*tukeyFilter;
                         end
-
-                    case "2Dradial"
-
-                        % Probably better to apply after center shift
-
+                
                     case "3D"
 
                         kSpaceSum = zeros(dimx,dimy,dimz);
-                        for i = 1:obj.nrCoils
-                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{i},[4 5 6 7 8]));
+                        for coil = 1:obj.nrCoils
+                            kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{coil},[4 5 6 7 8]));
                         end
                         [~,idx] = max(kSpaceSum(:));
                         [lev, row, col] = ind2sub(size(kSpaceSum),idx);
-                        for i=1:obj.nrCoils
-                            flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,filterWidth);
+                        for coil=1:obj.nrCoils
+                            flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,obj.tukeyFilterWidth);
                             tukeyFilter(:,:,:,1,1,1) = flt;
-                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
+                            obj.rawKspace{coil} = obj.rawKspace{coil}.*tukeyFilter;
                         end
-
-                    case "3Dute"
-
-                        tmpFilter = tukeywin(2*dimx,filterWidth/2);
-                        tmpFilter = tmpFilter(dimx+1:end);
-                        for i = 1:obj.nrCoils
-                            tukeyFilter(:,1,1,1,1,1) = tmpFilter;
-                            obj.rawKspace{i} = obj.rawKspace{i}.*tukeyFilter;
-                        end
-
+      
                 end
 
             end
@@ -2519,171 +2544,111 @@ classdef proudData
 
 
 
-
         % ---------------------------------------------------------------------------------
-        % Image reconstruction: compressed sensing 2D CINE
+        % Estimate coil sensitivities
+        % Oct 2023
         % ---------------------------------------------------------------------------------
-        function obj = csReco2DCine(obj, app, flipAngle)
+        function obj = estimateCoilSensitivies(obj, app)
 
-            % CS regularization parameters
-            LW = app.WVxyzEditField.Value;
-            TVxy = app.TVxyzEditField.Value;
-            LR = app.LRxyzEditField.Value;
-            TVd = app.TVtimeEditField.Value;
+            dimM = obj.maxCoils;
+            dimC = obj.nrCoils;
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            calibSize = obj.coilSensitivityCalibSize;
+            minSense = 0.01;
 
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,:);
-            end
+            obj.coilSensitivities(1:dimM) = 1;
+            relativeCoilSensitivity = ones(1,dimM);
 
-            % kSpaceRaw = {coil}[X Y slices NR FA NE z]
-            %                    1 2    3    4 5  6  7
-            dimx = app.XEditField.Value;
-            dimy = app.YEditField.Value;
-            dimz = size(kSpaceRaw{1},3);
-            app.ZEditField.Value = dimz;
-            dimd = app.NREditField.Value;
-            dimte = size(kSpaceRaw{1},6);
+            if dimC > 1
 
-            % Resize k-space to next power of 2
-            for i = 1:obj.nrCoils
-                kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 3 ',num2str(dimd)],kSpaceRaw{i});
-            end
+                for coil = 1:dimC
 
-            % Put all data in a normal matrix
-            kSpace = zeros(dimx,dimy,dimz,dimd,1,dimte,1,obj.nrCoils);
-            for i = 1:obj.nrCoils
-                kSpace(:,:,:,:,:,:,1,i) = kSpaceRaw{i};
-            end
+                    switch obj.dataType
 
-            % Bart dimensions
-            % 	READ_DIM,       1   z
-            % 	PHS1_DIM,       2   y
-            % 	PHS2_DIM,       3   x
-            % 	COIL_DIM,       4   coils
-            % 	MAPS_DIM,       5   sense maps
-            % 	TE_DIM,         6   TE
-            % 	COEFF_DIM,      7
-            % 	COEFF2_DIM,     8
-            % 	ITER_DIM,       9
-            % 	CSHIFT_DIM,     10
-            % 	TIME_DIM,       11  dynamics
-            % 	TIME2_DIM,      12
-            % 	LEVEL_DIM,      13
-            % 	SLICE_DIM,      14  slices
-            % 	AVG_DIM,        15
+                        case {"2D","2Depi"}
 
-            %                            1  2  3  4  5  6  7  8  9  10 11 12 13 14
-            kSpacePics = permute(kSpace,[7 ,2 ,1 ,8 ,9 ,6 ,5 ,10,11,12,4 ,13,14,3 ]);
+                            tmpKspace = sum(abs(obj.rawKspace{coil}),[3,4,5,6]);
+                            [~,mIdx] = max(tmpKspace,[],"all","linear");
+                            [x,y] = ind2sub(size(tmpKspace),mIdx);
+                            xmin = x-calibSize+1;
+                            xmin(xmin<1) = 1;
+                            xmax = x+calibSize;
+                            xmax(xmax>dimX) = dimX;
+                            ymin = y-calibSize+1;
+                            ymin(ymin<1) = 1;
+                            ymax = y+calibSize;
+                            ymax(ymax>dimY) = dimY;
+                            lowResKspace = tmpKspace(xmin:xmax,ymin:ymax);
+                            relativeCoilSensitivity(coil) = mean(lowResKspace(:));
 
-            % wavelet in y and x spatial dimensions 2^1 + 2^2 = 6
-            % total variation in y and x spatial dimensions 2^1 + 2^2 = 6
-            % total variation in TE and dynamic dimension 2^5 + 2^10 = 1056
+                        case "3D"
 
-            % Select the active coils only
-            nrActiveCoils = nnz(obj.coilActive_flag);
-            kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
+                            tmpKspace = sum(abs(obj.rawKspace{coil}),[4,5,6]);
+                            [~,mIdx] = max(tmpKspace,[],"all","linear");
+                            [x,y,z] = ind2sub(size(tmpKspace),mIdx);
+                            disp([x,y,z])
+                            xmin = x-calibSize+1;
+                            xmin(xmin<1) = 1;
+                            xmax = x+calibSize;
+                            xmax(xmax>dimX) = dimX;
+                            ymin = y-calibSize+1;
+                            ymin(ymin<1) = 1;
+                            ymax = y+calibSize;
+                            ymax(ymax>dimY) = dimY;
+                            zmin = z-calibSize+1;
+                            zmin(zmin<1) = 1;
+                            zmax = z+calibSize;
+                            zmax(zmax>dimZ) = dimZ;
+                            lowResKspace = tmpKspace(xmin:xmax,ymin:ymax,zmin:zmax);
+                            relativeCoilSensitivity(coil) = mean(lowResKspace(:));
 
-            if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                        case {"2Dradial","3Dute"}
 
-                % ESPIRiT reconstruction
-                TextMessage(app,'ESPIRiT reconstruction ...');
+                            tmpKspace = sum(abs(obj.rawKspace{coil}),[2,3,4,5,6]);
+                            [~,mIdx] = max(tmpKspace,[],"all","linear");
+                            x = ind2sub(size(tmpKspace),mIdx);
+                            xmin = x-calibSize+1;
+                            xmin(xmin<1) = 1;
+                            xmax = x+calibSize;
+                            xmax(xmax>dimX) = dimX;
+                            lowResKspace = tmpKspace(xmin:xmax);
+                            relativeCoilSensitivity(coil) = mean(lowResKspace(:));
 
-                % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
-                for slice = 1:size(kSpacePics,14)
-                    for dynamic = 1:size(kSpacePics,11)
-                        app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice),", dynamic ",num2str(dynamic)," ..."));
-                        sensitivities(1,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice));
                     end
+
                 end
 
-            end
-
-            if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
-
-                % Sensitivity correction
-                sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dimz);
-                for i = 1:obj.nrCoils
-                    sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
-                end
-                sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
+                relativeCoilSensitivity(1:dimC) = relativeCoilSensitivity(1:dimC) / max(relativeCoilSensitivity(1:dimC));
+                relativeCoilSensitivity(relativeCoilSensitivity<minSense) = minSense;
 
             end
 
-            % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, echo-time ...
-            sensemap = permute(abs(sensitivities),[3 2 14 11 4 1 5 6 7 8 9 10 12 13 15]);
-            sensemap = sensemap/max(sensemap(:));
-            sensemap = flip(sensemap,2);
-            if obj.PHASE_ORIENTATION == 0
-                sensemap = flip(sensemap,1);
-            end
-            cnt = 1;
-            for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    for echoTime = 1:dimte
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1,1,1,1,1,1,1,1,1,1);
-                    end
-                    cnt = cnt + 1;
-                else
-                    for echoTime = 1:dimte
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
-                    end
-                end
-            end
+            obj.coilSensitivities = round(relativeCoilSensitivity,3);
 
-            % Pics reconstuction
-            picsCommand = 'pics -S';
-            if LW>0
-                picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
-            end
-            if TVxy>0
-                picsCommand = [picsCommand,' -R',obj.totalVariation,':6:0:',num2str(TVxy)];
-            end
-            if LR>0
-                % Locally low-rank in the spatial domain
-                blocksize = round(max([dimx dimy])/16);  % Block size
-                app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
-                picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
-            end
-            if TVd>0
-                picsCommand = [picsCommand,' -R',obj.totalVariation,':1056:0:',num2str(TVd)];
-            end
-            imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+            app.S1EditField.Value = app.pd.coilSensitivities(1);
+            app.S2EditField.Value = app.pd.coilSensitivities(2);
+            app.S3EditField.Value = app.pd.coilSensitivities(3);
+            app.S4EditField.Value = app.pd.coilSensitivities(4);
+            app.S5EditField.Value = app.pd.coilSensitivities(5);
+            app.S6EditField.Value = app.pd.coilSensitivities(6);
+            app.S7EditField.Value = app.pd.coilSensitivities(7);
+            app.S8EditField.Value = app.pd.coilSensitivities(8);
+            drawnow;
 
-            % Combination of coils and/or the two ESPIRiT images using root of sum of squares
-            imageReco = bart(app,'rss 16', imageReco);
+        end % estimateCoilSensitivies
 
-            % Rearrange to correct orientation: x, y, slices, dynamics, flip-angle, TE (cine)
-            imageReco = permute(imageReco,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
 
-            % Flip dimensions where needed
-            if obj.PHASE_ORIENTATION == 1
-                imagesOut = flip(imageReco,2);
-            else
-                imagesOut = flip(flip(imageReco,2),1);
-            end
-
-            % Return the images object
-            for slice = 1:size(imagesOut,3)
-                for dynamic = 1:size(imagesOut,4)
-                    for echoTime = 1:size(imagesOut,6)
-                        obj.complexImages(:,:,slice,dynamic,flipAngle,echoTime) = imagesOut(:,:,slice,dynamic,1,echoTime);
-                        obj.images(:,:,slice,dynamic,flipAngle,echoTime) = abs(imagesOut(:,:,slice,dynamic,1,echoTime));
-                        obj.phaseImages(:,:,slice,dynamic,flipAngle,echoTime) = angle(imagesOut(:,:,slice,dynamic,1,echoTime));
-                        obj.phaseImagesOrig(:,:,slice,dynamic,flipAngle,echoTime) = angle(imagesOut(:,:,slice,dynamic,1,echoTime));
-                    end
-                end
-            end
-
-        end % csReco2DCine
 
 
 
 
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 2D
+        % Oct 2023
         % ---------------------------------------------------------------------------------
-        function obj = csReco2D(obj, app, flipAngle, echoTime)
+        function obj = csReco2D(obj, app)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -2691,37 +2656,45 @@ classdef proudData
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
 
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
+            % Input k-space dimensions
+            dimx = size(obj.rawKspace{1},1);
+            dimy = size(obj.rawKspace{1},2);
+            dimz = size(obj.rawKspace{1},3);
+            app.ZEditField.Value = dimz;
+            dimd = size(obj.rawKspace{1},4);
+            dimf = size(obj.rawKspace{1},5);
+            dime = size(obj.rawKspace{1},6);
+            dimc = obj.nrCoils;
+
+            % Requested image dimensions
+            ndimx = app.XEditField.Value;
+            ndimy = app.YEditField.Value;
+            ndimd = dimd;
+            if dimd > 1
+                ndimd = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+
+            % Kspace data x,y,slice,dynamic,flipangle,echotime,coils
+            kSpace = zeros(dimx,dimy,dimz,dimd,dimf,dime,dimc);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimc
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
+            end
+
+            % For EPI data
+            if strcmp(obj.dataType,'2Depi')
+                [obj, kSpace] = obj.epiCorr(app, kSpace);
             end
 
             if app.bartDetected_flag
+
                 % CS reco with BART
 
-                % kSpaceRaw = {coil}[X Y slices NR]
-                %                    1 2    3    4
-                dimx = app.XEditField.Value;
-                dimy = app.YEditField.Value;
-                dimz = size(kSpaceRaw{1},3);
-                app.ZEditField.Value = dimz;
-                dimd = app.NREditField.Value;
-
-                % Resize k-space to next power of 2
-                for i = 1:obj.nrCoils
-                    kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 3 ',num2str(dimd)],kSpaceRaw{i});
-                end
-
-                % kspace data x,y,slices,NR,coils
-                kSpace = zeros(dimx,dimy,dimz,dimd,obj.nrCoils);
-                for i = 1:obj.nrCoils
-                    kSpace(:,:,:,:,i) = kSpaceRaw{i};
-                end
-
-                % For EPI data
-                if strcmp(obj.dataType,'2Depi')
-                    [obj, kSpace] = obj.epiCorr(app, kSpace);
-                end
+                % Resize k-space to requested dimensions [ndimx ndimy slices ndimd]
+                kSpace = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 3 ',num2str(ndimd)],kSpace);
 
                 % Bart dimensions
                 % 	READ_DIM,       1   z
@@ -2729,8 +2702,8 @@ classdef proudData
                 % 	PHS2_DIM,       3   x
                 % 	COIL_DIM,       4   coils
                 % 	MAPS_DIM,       5   sense maps
-                % 	TE_DIM,         6
-                % 	COEFF_DIM,      7
+                % 	TE_DIM,         6   echo-time
+                % 	COEFF_DIM,      7   flip-angle
                 % 	COEFF2_DIM,     8
                 % 	ITER_DIM,       9
                 % 	CSHIFT_DIM,     10
@@ -2742,61 +2715,55 @@ classdef proudData
 
                 %                            0  1  2  3  4  5  6  7  8  9  10 11 12 13
                 %                            1  2  3  4  5  6  7  8  9  10 11 12 13 14
-                kSpacePics = permute(kSpace,[6 ,2 ,1 ,5 ,7 ,8 ,9 ,10,11,12,4 ,13,14,3 ]);
+                kSpacePics = permute(kSpace,[8 ,2 ,1 ,7 ,9 ,6 ,5 ,10,11,12,4 ,13,14,3 ]);
 
-                % wavelet in y and x spatial dimensions 2^1+2^2=6
-                % total variation in y and x spatial dimensions 2^1+2^2=6
-                % total variation in dynamic dimension 2^10 = 1024
 
-                % Select the active coils only
-                nrActiveCoils = nnz(obj.coilActive_flag);
-                kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
-
-                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
 
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
                     % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
+                    sensitivities = zeros(1,ndimy,ndimx,dimc,1,1,1,1,1,1,ndimd,1,1,dimz);
                     for slice = 1:dimz
-                        for dynamic = 1:dimd
-                            app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice),", dynamic ",num2str(dynamic)," ..."));
-                            sensitivities(1,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice));
+                        app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice)," ..."));
+                        sensitivities(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice) = bart(app,'ecalib -d1 -S -I -a -m1', kSpacePics(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice));
+                    end
+
+                else
+
+                    sensitivities = zeros(1,ndimy,ndimx,dimc,1,1,1,1,1,1,ndimd,1,1,dimz);
+                    for coil = 1:obj.maxCoils
+                        if logical(obj.coilActive_flag(coil))
+                            sensitivities(1,:,:,coil,1,1,1,1,1,1,:,1,1,:) = obj.coilSensitivities(coil);
                         end
                     end
 
                 end
 
-                if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
-
-                    % Sensitivity correction
-                    sensitivities = ones(1,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dimz,1);
-                    for i = 1:obj.nrCoils
-                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
-                    end
-                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
-     
-                end
-
-                % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, echo-time ...
-                sensemap = permute(abs(sensitivities),[3 2 14 11 4 1 5 6 7 8 9 10 12 13 15]);
-                sensemap = sensemap/max(sensemap(:));
-                sensemap = flip(sensemap,2);
-
+                % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, flip-angle, echo-time ...
+                senseMap = permute(abs(sensitivities),[3 2 14 11 4 6 5 1 7 8 9 10 12 13 15]);
+                senseMap = flip(senseMap,2);
                 if obj.PHASE_ORIENTATION == 0
-                    sensemap = flip(sensemap,1);
+                    senseMap = flip(senseMap,1);
                 end
-                cnt = 1;
                 for coil = 1:obj.maxCoils
-                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1,1,1,1,1,1,1,1,1,1);
-                        cnt = cnt + 1;
-                    else
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                    for echo = 1:dime
+                        for fa = 1:dimf
+                            if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimc)
+                                obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = senseMap(:,:,:,:,coil,1,1,1,1,1,1,1,1,1,1);
+                            else
+                                obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = zeros(size(senseMap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                            end
+                        end
                     end
                 end
 
-                % Pics reconstruction
+                % wavelet in y and x spatial dimensions 2^1+2^2=6
+                % total variation in y and x spatial dimensions 2^1+2^2=6
+                % total variation in dynamic dimension 2^10 = 1024
+
+                % PICS command
                 picsCommand = 'pics -S';
                 if LW>0
                     picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
@@ -2806,7 +2773,7 @@ classdef proudData
                 end
                 if LR>0
                     % Locally low-rank in the spatial domain
-                    blocksize = round(max([dimx dimy])/16);  % Block size
+                    blocksize = round(max([ndimx ndimy])/16);  % Block size
                     app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
                     picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
                 end
@@ -2814,23 +2781,45 @@ classdef proudData
                     picsCommand = [picsCommand,' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
 
-                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
-                    for slice = 1:size(kSpacePics,14)
-                        for dynamic = 1:size(kSpacePics,11)
-                            imageReco = bart(app,picsCommand,kSpacePics,sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slice,:));      
+                % PICS reconstruction
+                imageReco = zeros(ndimy,ndimx,1,1,1,dime,dimf,1,1,1,ndimd,1,1,dimz);
+
+                % Initialize progress counter
+                app.totalCounter = dime*dimf*dimz;
+                app.progressCounter = 0;
+
+                echo = 0;
+                while (echo < dime) && ~app.stopReco_flag
+                    echo = echo + 1;
+
+                    fa = 0;
+                    while (fa < dimf) && ~app.stopReco_flag
+                        fa = fa + 1;
+
+                        slice = 0;
+                        while (slice < dimz) && ~app.stopReco_flag
+                            slice = slice + 1;
+
+                            % Bart reco
+                            k = kSpacePics(1,:,:,:,1,echo,fa,1,1,1,:,1,1,slice);
+                            s = sensitivities(1,:,:,:,1,1,1,1,1,1,:,1,1,slice);
+                            imageReco(:,:,1,1,1,echo,fa,1,1,1,:,1,1,slice) = bart(app,picsCommand,k,s);
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
                         end
+
                     end
-                else
-                    imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+
                 end
 
-                % Combination of coils and/or the two ESPIRiT images using root of sum of squares
-                imageReco = bart(app,'rss 24', imageReco);
-              
-                % Rearrange to correct orientation: x, y, slices, dynamics,
-                imagesOut = permute(imageReco,[3 2 14 11 4 6 1 5 7 8 9 10 12 13 15]);
+                % Permute to [X Y slice dynamics]
+                imagesOut = permute(imageReco,[2,1,14,11,7,6,3,4,5,8,9,10,12,13]);
 
-                % Flip dimensions where needed
+                % Flip dimensions if needed
                 imagesOut = flip(imagesOut,2);
                 if obj.PHASE_ORIENTATION == 0
                     imagesOut = flip(imagesOut,1);
@@ -2838,19 +2827,13 @@ classdef proudData
 
                 % Masking of EPI data
                 if strcmp(obj.dataType,'2Depi')
-                    for dynamic = 1:dimd
+                    for dynamic = 1:ndimd
                         for slice = 1:dimz
-                            msk(:,:,slice,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[dimx dimy]);
+                            msk(:,:,slice,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[ndimx ndimy]);
                         end
                     end
                     imagesOut = imagesOut.*flip(msk,2);
                 end
- 
-                % Return the images object
-                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
-                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
 
             else
 
@@ -2858,143 +2841,136 @@ classdef proudData
 
                 app.TextMessage('WARNING: Bart toolbox not available, slow reconstruction ...');
 
-                % kSpaceRaw = {coil}[X Y slices NR]
-                %                    1 2    3   4
-                dimx = size(kSpaceRaw{1},1);
-                dimy = size(kSpaceRaw{1},2);
-                dimz = size(kSpaceRaw{1},3);
-                app.ZEditField.Value = dimz;
-                dimd = size(kSpaceRaw{1},4);
-                app.NREditField.Value = dimd;
-                ndimx = app.XEditField.Value;
-                ndimy = app.YEditField.Value;
+                % k-space for reconstruction [X Y slices dynamics coils]
 
-                % Kspace data [x,y,z,dynamics,coils]
-                kSpace = zeros(dimx,dimy,dimz,dimd,obj.nrCoils);
-                if app.AutoSensitivityCheckBox.Value == 1
-                    for i = 1:obj.nrCoils
-                        kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
-                    end
-                else
-                    for i = 1:obj.nrCoils
-                        kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilSensitivities(i)*obj.coilActive_flag(i);
-                    end
+                % Interpolate in the dynamics dimension
+                if ndimd ~= dimd
+                    kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimd 1 1 1],'cubic');
+                    ndimd = size(kSpace,4);
+                    app.NREditField.Value = ndimd;
                 end
-                
-                % For EPI data
-                if strcmp(obj.dataType,'2Depi')
-                    [obj, kSpace] = obj.epiCorr(app, kSpace);
-                end
-
-                kSpace = permute(kSpace,[1,2,4,3,5]);
-                averages = obj.fillingSpace(:,:,:,:,flipAngle,echoTime);
-                averages = permute(averages,[1,2,4,3]);
-
-                % Reset progress counter
-                param.iteration = 0;
-                drawnow;
 
                 % Preallocate
-                imagesOut = zeros(ndimx,ndimy,dimz,dimd);
+                imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimf,dime);
 
-                % Slice loop
-                for slice = 1:dimz
+                % Initialize progress counter
+                app.totalCounter = dime*dimf*dimz;
+                app.progressCounter = 0;
 
-                    % Fool the reco if dimd = 1, it needs at least 2 dynamics
-                    if dimd == 1
-                        kSpace(:,:,2,:) = kSpace(:,:,1,:);
-                    end
+                echo = 0;
+                while (echo < dime) && ~app.stopReco_flag
+                    echo = echo + 1;
 
-                    % Kspace of slice
-                    kData = squeeze(kSpace(:,:,:,slice,:));
-                    kMask = squeeze(averages(:,:,:,slice,1));
+                    fa = 0;
+                    while (fa < dimf) && ~app.stopReco_flag
+                        fa = fa + 1;
 
-                    % Zero-fill or crop x-dimension
-                    if ndimx > dimx
-                        padsizex = round((ndimx - dimx)/2);
-                        kdatai = padarray(kData,[padsizex,0,0,0],'both');
-                        maski = padarray(kMask,[padsizex,0,0],'both');
-                    else
-                        cropsize = round((dimx - ndimx)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kData(cropsize+1:end-cropsize,:,:,:);
-                        maski = kMask(cropsize+1:end-cropsize,:,:);
-                    end
+                        slice = 0;
+                        while (slice < dimz) && ~app.stopReco_flag
+                            slice = slice + 1;
 
-                    % Zero-fill or crop y-dimension
-                    if ndimy > dimy
-                        padsizey = round((ndimy - dimy)/2);
-                        kdatai = padarray(kdatai,[0,padsizey,0,0],'both');
-                        maski = padarray(maski,[0,padsizey,0],'both');
-                    else
-                        cropsize = round((dimy - ndimy)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,cropsize+1:end-cropsize,:,:);
-                        maski = maski(:,cropsize+1:end-cropsize,:);
-                    end
+                            % Fool the reco if dimd = 1, it needs at least 2 dynamics
+                            if ndimd == 1
+                                kSpace(:,:,slice,2,fa,echo,:) = kSpace(:,:,slice,1,fa,echo,:);
+                                kData = zeros(dimx,dimy,2,dimc);
+                                kMask = zeros(dimx,dimy,2);
+                            else
+                                kData = zeros(dimx,dimy,ndimd,dimc);
+                                kMask = zeros(dimx,dimy,ndimd);
+                            end
 
-                    % Make sure dimensions are exactly ndimx, ndimy
-                    kdatai = kdatai(1:ndimx,1:ndimy,:,:);
-                    maski = maski(1:ndimx,1:ndimy,:);
+                            % Kspace of slice
+                            kData(:,:,:,:) = kSpace(:,:,slice,:,fa,echo,:);
+                            kMask(:,:,:) = logical(abs(kSpace(:,:,slice,:,fa,echo,1)));
 
-                    % Make the mask
-                    maski = maski./maski;
-                    maski(isnan(maski)) = 1;
-                    maski = logical(maski);
+                            % Zero-fill or crop x-dimension
+                            if ndimx > dimx
+                                padsizex = round((ndimx - dimx)/2);
+                                kdatai = padarray(kData,[padsizex,0,0,0],'both');
+                                maski = padarray(kMask,[padsizex,0,0],'both');
+                            else
+                                cropsize = round((dimx - ndimx)/2)-1;
+                                cropsize(cropsize<0)=0;
+                                kdatai = kData(cropsize+1:end-cropsize,:,:,:);
+                                maski = kMask(cropsize+1:end-cropsize,:,:);
+                            end
 
-                    % Size of the data
-                    [nx,ny,~,obj.nrCoils]=size(kdatai);
+                            % Zero-fill or crop y-dimension
+                            if ndimy > dimy
+                                padsizey = round((ndimy - dimy)/2);
+                                kdatai = padarray(kdatai,[0,padsizey,0,0],'both');
+                                maski = padarray(maski,[0,padsizey,0],'both');
+                            else
+                                cropsize = round((dimy - ndimy)/2)-1;
+                                cropsize(cropsize<0)=0;
+                                kdatai = kdatai(:,cropsize+1:end-cropsize,:,:);
+                                maski = maski(:,cropsize+1:end-cropsize,:);
+                            end
 
-                    % Normalize the data in the range of approx 0 - 1 for better numerical stability
-                    kdatai = kdatai/max(abs(kdatai(:)));
+                            % Make sure dimensions are exactly ndimx, ndimy
+                            kdatai = kdatai(1:ndimx,1:ndimy,:,:);
+                            maski = maski(1:ndimx,1:ndimy,:);
 
-                    % Coil sensitivity map
-                    b1 = ones(nx,ny,obj.nrCoils);
+                            % Normalize the data in the range of approx 0 - 1 for better numerical stability
+                            kdatai = kdatai/max(abs(kdatai(:)));
 
-                    % Data
-                    param.y = kdatai;
+                            % Coil sensitivity map
+                            for coil = 1:dimc
+                                b1(:,:,coil) = ones(ndimx,ndimy)*obj.coilSensitivities(coil);
+                            end
 
-                    % Reconstruction design matrix
-                    param.E = Emat_yxt(maski,b1);
+                            % Data
+                            param.y = kdatai;
 
-                    % Total variation (TV) constraint in the temporal domain & Wavelet in spatial domain
-                    param.TV = TVOP;
-                    param.TVWeight = TVd/8;
+                            % Reconstruction design matrix
+                            param.E = Emat_yxt(maski,b1);
 
-                    % Wavelet
-                    param.W = Wavelet('Daubechies',12,12);
-                    param.L1Weight = LW;
+                            % Total variation (TV) constraint in the temporal domain & Wavelet in spatial domain
+                            param.TV = TVOP;
+                            param.TVWeight = TVd/10;
 
-                    % Number of iterations, 2 x 10 iterations
-                    param.nite = 10;
-                    param.nouter = 2;
-                    param.totaliterations = dimz * param.nouter * param.nite;
+                            % Wavelet
+                            param.W = Wavelet('Daubechies',12,12);
+                            param.L1Weight = LW;
 
-                    % Linear reconstruction
-                    nrd = size(kdatai,3);
-                    kdata1 = squeeze(randn(ndimx,ndimy,nrd,obj.nrCoils))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
-                    recon_dft = param.E'*kdata1;
+                            % Number of iterations, 2 x 5 iterations
+                            param.nite = 5;
+                            param.nouter = 2;
 
-                    % Iterative reconstruction
-                    recon_cs = recon_dft;
-                    for n = 1:param.nouter
-                        [recon_cs,param.iteration] = CSL1NlCg(app,recon_cs,param);
-                    end
-                    imageReco = recon_cs;
+                            % Linear reconstruction
+                            nrd = size(kdatai,3);
+                            kdata1 = squeeze(randn(ndimx,ndimy,nrd,dimc))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
+                            recon_dft = param.E'*kdata1;
 
-                    % Output reconstructed image
-                    if dimd == 1
-                        imagesOut(:,:,slice,:) = imageReco(:,:,1);
-                    else
-                        imagesOut(:,:,slice,:) = imageReco;
-                    end
+                            % Iterative reconstruction
+                            recon_cs = recon_dft;
+                            for n = 1:param.nouter
+                                recon_cs = CSL1NlCg(recon_cs,param);
+                            end
+                            imageReco = recon_cs;
 
-                    % Masking of EPI data
-                    if strcmp(obj.dataType,'2Depi')
-                        for dynamic = 1:dimd
-                            msk(:,:,1,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[size(imagesOut,1) size(imagesOut,2)]);
+                            % Output reconstructed image
+                            if dimd == 1
+                                imagesOut(:,:,slice,:,fa,echo) = imageReco(:,:,1);
+                            else
+                                imagesOut(:,:,slice,:,fa,echo) = imageReco;
+                            end
+
+                            % Masking of EPI data
+                            if strcmp(obj.dataType,'2Depi')
+                                for dynamic = 1:ndimd
+                                    msk(:,:,1,dynamic,fa,echo) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[size(imagesOut,1) size(imagesOut,2)]);
+                                end
+                                imagesOut(:,:,slice,:,fa,echo) = imagesOut(:,:,slice,:,fa,echo).*flip(msk,2);
+                            end
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
                         end
-                        imagesOut(:,:,slice,:) = imagesOut(:,:,slice,:).*flip(msk,2);
+
                     end
 
                 end
@@ -3010,21 +2986,20 @@ classdef proudData
 
                 % Fake coil sensitivities
                 for coil = 1:obj.maxCoils
-                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imagesOut));
+                    if logical(obj.coilActive_flag(coil)) == 1 && (coil <= dimc)
+                        obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
                     else
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imagesOut));
+                        obj.sensitivityMaps{coil} = zeros(size(imagesOut));
                     end
                 end
-             
-                % Return the images object
-                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
-                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
-
 
             end
+
+            % Return the image objects
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % csReco2D
 
@@ -3034,167 +3009,179 @@ classdef proudData
 
         % ---------------------------------------------------------------------------------
         % Image reconstruction: FFT 2D
-        % Version Aug 2023
+        % Oct 2023
         % ---------------------------------------------------------------------------------
-        function obj = fftReco2D(obj, app, flipAngle, echoTime)
+        function obj = fftReco2D(obj, app)
 
-            kSpaceRaw = cell(obj.nrCoils);
-            kSpaceRawOrig = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
-            end
-
-            % kSpaceRaw = {coil}[X Y slices dynamics]
-            %                    1 2    3      4
-            dimx = size(kSpaceRaw{1},1);
-            dimy = size(kSpaceRaw{1},2);
-            dimz = size(kSpaceRaw{1},3);
-            app.ZEditField.Value = dimz;
-            dimd = size(kSpaceRaw{1},4);
+            % Dimensions
+            dimx = size(obj.rawKspace{1},1);
+            dimy = size(obj.rawKspace{1},2);
+            dimz = size(obj.rawKspace{1},3);
+            dimd = size(obj.rawKspace{1},4);
+            dimf = size(obj.rawKspace{1},5);
+            dime = size(obj.rawKspace{1},6);
             dimc = obj.nrCoils;
 
-            % Requested dimensions
+            % Requested new dimensions
             ndimx = app.XEditField.Value;
             ndimy = app.YEditField.Value;
-            ndimd  = app.NREditField.Value;
-
-            for i = 1:obj.nrCoils
-                if dimd ~= ndimd 
-                    % Interpolate the time dimension if requested
-                    kSpaceRaw{i} = permute(kSpaceRaw{i},[4,3,1,2]);
-                    kSpaceRaw{i} = imresize(kSpaceRaw{i},[ndimd,dimz]);
-                    kSpaceRaw{i} = permute(kSpaceRaw{i},[3,4,2,1]);
-                end
-                % Kspace data x,y,slices,NR
-                % kSpaceRaw{i} = permute(kSpaceRaw{i},[1,2,4,3]);
-            end
-
-            % Kspace data x,y,slice,NR,coils
-            kSpace = zeros(dimx,dimy,dimz,ndimd,dimc);
-
-            if app.AutoSensitivityCheckBox.Value == 1
-                for i = 1:dimc
-                    kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
-                end
+            ndimd = dimd;
+            if dimd > 1
+                ndimd = app.NREditField.Value;
             else
-                for i = 1:dimc
-                    kSpace(:,:,:,:,i) = kSpaceRaw{i}*obj.coilSensitivities(i)*obj.coilActive_flag(i);
-                end
+                app.NREditField.Value = 1;
             end
 
-            % Preallocate
-            imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimc);
+            % Slice interpolation not implemented
+            app.ZEditField.Value = dimz;
 
-            % Message
-            if obj.halfFourier_flag
-                app.TextMessage('Homodyne FFT reconstruction ...');
-            else
-                app.TextMessage('Standard FFT reconstruction ...');
+            % Kspace data x,y,slice,dynamic,flipangle,echotime,coils
+            kSpace = zeros(dimx,dimy,dimz,dimd,dimf,dime,dimc);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimc
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
+
+            % Interpolate in the dynamics dimension
+            if ndimd ~= dimd
+                kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimd 1 1 1],'cubic');
+                ndimd = size(kSpace,4);
+                app.NREditField.Value = ndimd;
+            end
+
+
+            % Preallocate output images
+            imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimf,dime);
 
             % For EPI data
             if strcmp(obj.dataType,'2Depi')
                 [obj, kSpace] = obj.epiCorr(app, kSpace);
             end
 
-            % Dynamic loop
-            dynamic = 0;
-            while (dynamic<ndimd) && ~app.stopReco_flag
-                dynamic = dynamic + 1;
+            % Initialize progress counter
+            app.totalCounter = dime*dimf*ndimd*dimz;
+            app.progressCounter = 0;
 
-                app.TextMessage(strcat("Reconstructing dynamic ",num2str(dynamic)," ..."));
-                drawnow;
+            % Echo loop
+            echo = 0;
+            while (echo < dime) && ~app.stopReco_flag
+                echo = echo + 1;
 
-                % Slice loop
-                slice = 0;
-                while (slice<dimz) && ~app.stopReco_flag
-                    slice = slice + 1;
-             
-                    % Homodyne / normal FFT
-                    if obj.halfFourier_flag
-                        kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
-                        image2D = zeros(dimx,dimy,nnz(obj.coilActive_flag));
-                        imageIn(:,:,:,1) = kdatai(:,:,logical(obj.coilActive_flag));
-                        image2D(:,:,:) = squeeze(homodyne(imageIn,app));
-                    else
-                        kdatai = squeeze(kSpace(:,:,slice,dynamic,:));
-                        image2D = zeros(dimx,dimy,dimc);
-                        for coil = 1:dimc
-                            image2D(:,:,coil) = proudData.fft2Dmri(squeeze(kdatai(:,:,coil)));
-                        end
-                    end
+                % flip-angle loop
+                fa = 0;
+                while (fa < dimf) && ~app.stopReco_flag
+                    fa = fa + 1;
 
-                    % Zero-fill or crop x-dimension and/or y-dimension
-                    if (ndimx~=dimx) || (ndimy~=dimy)
+                    % Dynamic loop
+                    dynamic = 0;
+                    while (dynamic < ndimd) && ~app.stopReco_flag
+                        dynamic = dynamic + 1;
 
-                        % Back to k-space
-                        kdatai = obj.fft2Dmri(image2D);
+                        % Slice loop
+                        slice = 0;
+                        while (slice<dimz) && ~app.stopReco_flag
+                            slice = slice + 1;
 
-                        if ndimx > dimx
-                            padsizex = round((ndimx - dimx)/2);
-                            kdatai = padarray(kdatai,[padsizex,0,0],'both');
-                        else
-                            cropsize = round((dimx - ndimx)/2)-1;
-                            cropsize(cropsize<0)=0;
-                            kdatai = kdatai(cropsize+1:end-cropsize,:,:);
-                        end
+                            % Input K-space
+                            kDataIn = squeeze(kSpace(:,:,slice,dynamic,fa,echo,:));
 
-                        if ndimy > dimy
-                            padsizey = round((ndimy - dimy)/2);
-                            kdatai = padarray(kdatai,[0,padsizey,0],'both');
-                        else
-                            cropsize = round((dimy - ndimy)/2)-1;
-                            cropsize(cropsize<0)=0;
-                            kdatai = kdatai(:,cropsize+1:end-cropsize,:);
-                        end
+                            % Homodyne / normal FFT
+                            if obj.halfFourier_flag
+                                [image2Dhom, phase2Dhom] = homodyne(app,kDataIn,'homodyne');
+                            else
+                                [image2Dhom, phase2Dhom] = homodyne(app,kDataIn,'none');
+                            end
 
-                        % Make sure dimensions are exactly ndimx, ndimy, coils
-                        kdatai = kdatai(1:ndimx,1:ndimy,:);
+                            % Reintroduce the phase
+                            image2D = image2Dhom.*exp(-1i*phase2Dhom);
 
-                        % Back to image space
-                        image2D = obj.ifft2Dmri(kdatai);
+                            % Zero-fill or crop x-dimension and/or y-dimension
+                            if (ndimx ~= dimx) || (ndimy ~= dimy)
 
-                    end
+                                % Back to k-space
+                                kDatai = obj.fft2Dmri(image2D);
 
-                    % Masking of EPI data
-                    if strcmp(obj.dataType,'2Depi')
-                        for coil = 1:size(image2D,4)
-                            msk(:,:,coil) = imresize(squeeze(obj.epiMask(:,:,slice,coil)),[size(image2D,1) size(image2D,2)]);
-                        end
-                        image2D = image2D.*msk;
-                    end
+                                if ndimx > dimx
+                                    padsizex = round((ndimx - dimx)/2);
+                                    kDatai = padarray(kDatai,[padsizex,0,0],'both');
+                                else
+                                    cropsize = round((dimx - ndimx)/2)-1;
+                                    cropsize(cropsize<0)=0;
+                                    kDatai = kDatai(cropsize+1:end-cropsize,:,:);
+                                end
 
-                    % Return the image
-                    imagesOut(:,:,slice,dynamic,:) = image2D;
+                                if ndimy > dimy
+                                    padsizey = round((ndimy - dimy)/2);
+                                    kDatai = padarray(kDatai,[0,padsizey,0],'both');
+                                else
+                                    cropsize = round((dimy - ndimy)/2)-1;
+                                    cropsize(cropsize<0)=0;
+                                    kDatai = kDatai(:,cropsize+1:end-cropsize,:);
+                                end
 
-                end % slice loop
+                                % Make sure dimensions are exactly ndimx, ndimy, coils
+                                kDatai = kDatai(1:ndimx,1:ndimy,:);
 
-            end % dynamic loop
+                                % Back to image space
+                                image2D = obj.ifft2Dmri(kDatai);
+
+                            end
+
+                            % Masking of EPI data
+                            if strcmp(obj.dataType,'2Depi')
+                                for coil = 1:size(image2D,4)
+                                    msk(:,:,coil) = imresize(squeeze(obj.epiMask(:,:,slice,coil)),[size(image2D,1) size(image2D,2)]);
+                                end
+                                image2D = image2D.*msk;
+                            end
+
+                            % Coil combine
+                            if dimc>1
+                                imageTmp(:,:,1,1,:) = image2D;
+                                try
+                                    image2D = coilCombine_mex(imageTmp);
+                                catch
+                                    image2D = coilCombine(imagesTmp);
+                                end
+                             end
+
+                            % Return the image
+                            imagesOut(:,:,slice,dynamic,fa,echo) = image2D;
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
+                        end % slice loop
+
+                    end % dynamic loop
+
+                end % flip-angle loop
+
+            end % echo-time loop
 
             % Flip dimensions if required
-            if obj.PHASE_ORIENTATION == 1
-                imagesOut = flip(imagesOut,2);
-            else
-                imagesOut = flip(flip(imagesOut,2),1);
+            imagesOut = flip(imagesOut,2);
+            if obj.PHASE_ORIENTATION == 0
+                imagesOut = flip(imagesOut,1);
             end
 
-            % Sum over coils
-            imagesOut = rssq(imagesOut,5);
-
-            % Fake coil sensitivities
+            % Make coil sensitivity maps
             for coil = 1:obj.maxCoils
                 if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imagesOut));
+                    obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
                 else
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imagesOut));
+                    obj.sensitivityMaps{coil} = zeros(size(imagesOut));
                 end
             end
-           
-            % Return the images object
-            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imagesOut;
-            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imagesOut);
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imagesOut);
+
+            % Return the image objects
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end %fftReco2D
 
@@ -3204,11 +3191,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 3D
         % ---------------------------------------------------------------------------------
-        function obj = csReco3D(obj, app, flipAngle, echoTime)
-
-            % Reset progress counter
-            param.iteration = 0;
-            drawnow;
+        function obj = csReco3D(obj, app)
 
             % CS regularization parameters
             LambdaWavelet = app.WVxyzEditField.Value;
@@ -3216,109 +3199,118 @@ classdef proudData
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
 
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime,:);
+            % Dimensions = [X Y slices dynamics, flipangle , echo, slab]
+            %               1 2    3      4          5         6     7
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            dimD = size(obj.rawKspace{1},4);
+            dimF = size(obj.rawKspace{1},5);
+            dimE = size(obj.rawKspace{1},6);
+            dimS = size(obj.rawKspace{1},7);
+            dimC = obj.nrCoils;
+
+            % Requested dimensions, dimz and dimd can only be interpolated when > 1
+            ndimX = app.XEditField.Value;
+            ndimY = app.YEditField.Value;
+            ndimZ = dimZ;
+            if dimZ > 1
+                ndimZ = app.ZEditField.Value;
+            else
+                app.ZEditField.Value = 1;
+            end
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+
+            % K-space data x,y,z,dynamics,flip-angles, echo-times, slabs, coils
+            kSpace = zeros(dimX,dimY,dimZ,dimD,dimF,dimE,dimS,dimC);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
             if app.bartDetected_flag
-                % CS reco with BART
+
+                % 3D CS reco with BART
 
                 % Use total variation (TGV takes too long)
                 obj.totalVariation = 'T';
 
-                % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
-                %                    1 2 3    4     5 6  7
-                dimx = app.XEditField.Value;
-                dimy = app.YEditField.Value;
-                dimz = app.ZEditField.Value;
-                dimzo = size(kSpaceRaw{1},3);
-                dimd = app.NREditField.Value;
-                dims = size(kSpaceRaw{1},7);
-
                 % Resize k-space (kx, ky, kz, dynamics, slab)
                 for i=1:obj.nrCoils
-                    kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 1 ',num2str(dimy),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
-                end
-
-                app.RecoProgressGauge.Value = 25;
-                drawnow;
-
-                kSpace = zeros(dimx,dimy,dimz,dimd,1,1,dims,obj.nrCoils);
-                for i = 1:obj.nrCoils
-                    kSpace(:,:,:,:,:,:,:,i) = kSpaceRaw{i};
+                    kSpace = bart(app,['resize -c 0 ',num2str(ndimX),' 1 ',num2str(ndimY),' 2 ',num2str(ndimZ),' 3 ',num2str(ndimD)],kSpace);
                 end
 
                 % Bart dimensions
                 % 	READ_DIM,       1   z
                 % 	PHS1_DIM,       2   y
                 % 	PHS2_DIM,       3   x
-                % 	COIL_DIM,       4   coils
+                % 	COIL_DIM,       4   coils      (8)
                 % 	MAPS_DIM,       5   sense maps
-                % 	TE_DIM,         6
-                % 	COEFF_DIM,      7
-                % 	COEFF2_DIM,     8
+                % 	TE_DIM,         6   echo-time  (6)
+                % 	COEFF_DIM,      7   flip-angle (5)
+                % 	COEFF2_DIM,     8   slab       (7)
                 % 	ITER_DIM,       9
                 % 	CSHIFT_DIM,     10
-                % 	TIME_DIM,       11  dynamics
+                % 	TIME_DIM,       11  dynamics   (4)
                 % 	TIME2_DIM,      12
                 % 	LEVEL_DIM,      13
                 % 	SLICE_DIM,      14  slices
                 % 	AVG_DIM,        15
 
-                %         BART index          0  1  2  3  4  5  6  7  8  9  10 11 12 13
-                %         Matlab index        1  2  3  4  5  6  7  8  9  10 11 12 13 14
-                kSpacePics = permute(kSpace,[3 ,2 ,1 ,8 ,5 ,6 ,9 ,10,11,12, 4 13 14 7 ]);
+                %         BART index         0  1  2  3  4  5  6  7  8  9  10 11 12 13
+                %         Matlab index       1  2  3  4  5  6  7  8  9  10 11 12 13 14
+                kSpacePics = permute(kSpace,[3  2  1  8  10 6  5  7  9  11 4  12 13 14]);
 
-                % Select the active coils only
-                nrActiveCoils = nnz(obj.coilActive_flag);
-                kSpacePics = kSpacePics(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:);
-
-                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
+                if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
 
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
-                   % Calculate coil sensitivity maps with ecalib bart function, per slab, per dynamic
-                    for slab = 1:dims
-                        for dynamic = 1:dimd
-                            app.TextMessage(strcat("Ecalib coil sensitivity estimation, slab ",num2str(slab),", dynamic ",num2str(dynamic)," ..."));
-                            sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:) = bart(app,'ecalib -d0 -S -I -a -m1 ', kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:));
+                    % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
+                    app.TextMessage("Ecalib coil sensitivity estimation ...");
+                    sensitivities = zeros(ndimZ,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,1);
+                    sensitivities(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1) = bart(app,'ecalib -d1 -S -I -a -m1', kSpacePics(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1));
+
+                else
+
+                    sensitivities = zeros(ndimZ,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,1);
+                    for coil = 1:obj.maxCoils
+                        if logical(obj.coilActive_flag(coil))
+                            sensitivities(:,:,:,coil,1,1,1,1,1,1,:,1,1,1) = obj.coilSensitivities(coil);
                         end
                     end
 
                 end
 
-                if nrActiveCoils==1 || app.AutoSensitivityCheckBox.Value==0
-
-                    % Sensitivity correction
-                    sensitivities = ones(dimz,dimy,dimx,obj.nrCoils,1,1,1,1,1,1,dimd,1,1,dims,1);
-                    for i = 1:obj.nrCoils
-                        sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:,:) = sensitivities(:,:,:,i,:,:,:,:,:,:,:,:,:,:,:)*obj.coilSensitivities(i);
-                    end
-                    sensitivities = sensitivities(:,:,:,logical(obj.coilActive_flag),:,:,:,:,:,:,:,:,:,:,:);
-
+                % Construct the sensitivity maps for the app {coil} x, y, z, dynamics, flip-angle, echo-time, slab, coils ...
+                senseMap = permute(abs(sensitivities),[3 2 1 11 7 6 8 4 5 9 10 12 13 14]);
+                senseMap = senseMap/max(senseMap(:));
+                senseMap = flip(flip(senseMap,3),2);
+                if obj.PHASE_ORIENTATION == 0
+                    senseMap = flip(senseMap,1);
                 end
-
-                % Construct the sensitivity maps for the app {coil} x, y, z, dynamics, slab, 1 ...
-                sensemap = permute(abs(sensitivities),[3 2 1 11 4 14 5 6 7 8 9 10 12 13 15]);
-                sensemap = sensemap/max(sensemap(:));
-                if obj.PHASE_ORIENTATION == 1
-                    sensemap = flip(flip(sensemap,3),2);
-                else
-                    sensemap = flip(flip(flip(sensemap,3),2),1);
-                end
-                cnt = 1;
                 for coil = 1:obj.maxCoils
-                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = sensemap(:,:,:,:,cnt,1); % slab 1 only for now
-                        cnt = cnt + 1;
-                    else
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(sensemap(:,:,:,:,1,1)));
+                    for echo = 1:dimE
+                        for fa = 1:dimF
+                            if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimC)
+                                obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = senseMap(:,:,:,:,1,1,1,coil,1,1,1,1,1,1);
+                            else
+                                obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = zeros(size(senseMap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                            end
+                        end
                     end
                 end
-               
-                % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7, total variation in time 2^10 = 1024
+
+                % Wavelet and TV in spatial dimensions 2^0+2^1+2^2=7
+                % total variation in time 2^10 = 1024
+
+                % PICS command
                 picsCommand = 'pics -S';
                 if LambdaWavelet>0
                     picsCommand = [picsCommand, ' -RW:7:0:',num2str(LambdaWavelet)];
@@ -3328,7 +3320,7 @@ classdef proudData
                 end
                 if LR>0
                     % Locally low-rank in the spatial domain
-                    blockSize = round(max([dimx dimy dimz])/16);  % Block size
+                    blockSize = round(max([dimX dimY dimZ])/16);  % Block size
                     app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blockSize)));
                     picsCommand = [picsCommand, ' -RL:7:7:',num2str(LR)];
                 end
@@ -3336,54 +3328,51 @@ classdef proudData
                     picsCommand = [picsCommand, ' -R',obj.totalVariation,':1024:0:',num2str(TVd)];
                 end
 
-                if nrActiveCoils>1 && app.AutoSensitivityCheckBox.Value==1
-                    for dynamic = 1:dimd
-                        for slab = 1:dims
-                            app.TextMessage(strcat("PICS reconstruction, slab ",num2str(slab),", dynamic ",num2str(dynamic)," ..."));
-                            imageReco(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:) = bart(app,picsCommand,kSpacePics(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:),sensitivities(:,:,:,:,:,:,:,:,:,:,dynamic,:,:,slab,:));
+                % PICS reconstruction
+                imageReco = zeros(ndimZ,ndimY,ndimX,1,1,dimE,dimF,dimS,1,1,ndimD,1,1,1);
+
+                app.TextMessage("PICS reconstruction ...");
+
+                % Initialize progress counter
+                app.totalCounter = dimE*dimF*dimS;
+                app.progressCounter = 0;
+
+                slab = 0;
+                while (slab < dimS) && ~app.stopReco_flag
+                    slab = slab + 1;
+
+                    echo = 0;
+                    while (echo < dimE) && ~app.stopReco_flag
+                        echo = echo + 1;
+
+                        fa = 0;
+                        while (fa < dimF) && ~app.stopReco_flag
+                            fa = fa + 1;
+
+                            % Bart reco
+                            k = kSpacePics(:,:,:,:,1,echo,fa,slab,1,1,:,1,1,1);
+                            s = sensitivities(:,:,:,:,1,1,1,1,1,1,:,1,1,1);
+                            imageReco(:,:,:,1,1,echo,fa,slab,1,1,:,1,1,1) = bart(app,picsCommand,k,s);
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
                         end
+
                     end
-                else
-                    imageReco = bart(app,picsCommand,kSpacePics,sensitivities);
+
                 end
 
-                % Combination of coils and/or the two ESPIRiT images using root of sum of squares
-                imageReco = bart(app,'rss 24', imageReco);
-
-                % Rearrange to correct orientation: x, y, z, dynamics, slab
-                imageReco = reshape(imageReco,[dimz,dimy,dimx,dimd,dims]);
-                imageSlab = permute(imageReco,[3,2,1,4,5]);
+                % Rearrange to correct orientation: x, y, z, dynamics, flip-angle, echo-time, slab
+                imageSlab = permute(imageReco,[3 2 1 11 7 6 8 4 5 9 10 12 13 14]);
 
                 % Flip dimensions to correct orientation
-                if obj.PHASE_ORIENTATION == 1
-                    imageSlab = flip(flip(imageSlab,3),2);
-                else
-                    imageSlab = flip(flip(flip(imageSlab,3),2),1);
+                imageSlab = flip(flip(imageSlab,3),2);
+                if obj.PHASE_ORIENTATION == 0
+                    imageSlab = flip(imageSlab,1);
                 end
-
-                % Slab ratio + discard
-                if dims>1
-                    nrDiscard = round(-0.5*dimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
-                    if nrDiscard>0
-                        imageSlab(:,:,dimz-nrDiscard+1:dimz,:,:) = [];
-                        imageSlab(:,:,1:nrDiscard,:,:) = [];
-                    end
-                end
-
-                % Concatenate multislab data
-                imageMultiSlab = imageSlab(:,:,:,:,1);
-
-                if dims>1
-                    for i = 2:dims
-                        imageMultiSlab = cat(3,imageMultiSlab,imageSlab(:,:,:,:,i));
-                    end
-                end
-
-                % Return the image objects
-                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlab;
-                obj.images(:,:,:,:,flipAngle,echoTime)  = abs(imageMultiSlab);
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlab);
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlab);
 
             else
 
@@ -3391,211 +3380,219 @@ classdef proudData
 
                 app.TextMessage('WARNING: Bart toolbox not available, slow reconstruction ...');
 
-                % kSpaceRaw = {coil}[X Y Z dynamics 1 1 slab]
-                %                    1 2 3    4     5 6   7
-                dimx = size(kSpaceRaw{1},1);
-                dimy = size(kSpaceRaw{1},2);
-                dimz = size(kSpaceRaw{1},3);
-                dimd = size(kSpaceRaw{1},4);
-                app.NREditField.Value = dimd;
-                dims = size(kSpaceRaw{1},7);
-                ndimx = app.XEditField.Value;
-                ndimy = app.YEditField.Value;
-                ndimz = app.ZEditField.Value;
-                param.iteration = 0;
-
-                % Preallocate
-                imageSlab = zeros(ndimx,ndimy,ndimz,dimd,dims);
-
-                for slab = 1:dims
-
-                    % Kspace data [x,y,z,dynamics,coils]
-                    kSpace = zeros(dimx,dimy,dimz,dimd,obj.nrCoils);
-                    for i = 1:obj.nrCoils
-                        if app.AutoSensitivityCheckBox.Value == 1
-                            kSpace(:,:,:,:,i) = kSpaceRaw{i}(:,:,:,:,:,:,slab)*obj.coilActive_flag(i);
-                        else
-                            kSpace(:,:,:,:,i) = squeeze(kSpaceRaw{i}(:,:,:,:,:,:,slab))*obj.coilSensitivities(i)*obj.coilActive_flag(i);
-                        end
-                    end
-                    averages = obj.fillingSpace(:,:,:,:,flipAngle,echoTime,slab);
-
-                    % Kspace of slice
-                    kData = kSpace(:,:,:,:,:);
-                    kMask = averages(:,:,:,:);
-
-                    % Fool the reco if dimd = 1, it needs at least 2 dynamics
-                    if dimd == 1
-                        kData(:,:,:,2,:) = kData(:,:,:,1,:);
-                    end
-
-                    % Zero-fill or crop x-dimension
-                    if ndimx > dimx
-                        padsizex = round((ndimx - dimx)/2);
-                        kdatai = padarray(kData,[padsizex,0,0,0,0],'both');
-                        maski = padarray(kMask,[padsizex,0,0,0],'both');
-                    else
-                        cropsize = round((dimx - ndimx)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kData(cropsize+1:end-cropsize,:,:,:,:);
-                        maski = kMask(cropsize+1:end-cropsize,:,:,:);
-                    end
-
-                    % Zero-fill or crop y-dimension
-                    if ndimy > dimy
-                        padsizey = round((ndimy - dimy)/2);
-                        kdatai = padarray(kdatai,[0,padsizey,0,0,0],'both');
-                        maski = padarray(maski,[0,padsizey,0,0],'both');
-                    else
-                        cropsize = round((dimy - ndimy)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,cropsize+1:end-cropsize,:,:,:);
-                        maski = maski(:,cropsize+1:end-cropsize,:,:);
-                    end
-
-                    % Zero-fill or crop z-dimension
-                    if ndimz > dimz
-                        padsizez = round((ndimz - dimz)/2);
-                        kdatai = padarray(kdatai,[0,0,padsizez,0,0],'both');
-                        maski = padarray(maski,[0,0,padsizez,0],'both');
-                    else
-                        cropsize = round((dimz - ndimz)/2)-1;
-                        cropsize(cropsize<0)=0;
-                        kdatai = kdatai(:,:,cropsize+1:end-cropsize,:,:);
-                        maski = maski(:,:,cropsize+1:end-cropsize,:);
-                    end
-
-                    % Make sure dimensions are exactly ndimx, ndimy, ndimz
-                    kdatai = kdatai(1:ndimx,1:ndimy,1:ndimz,:,:);
-                    maski = maski(1:ndimx,1:ndimy,1:ndimz,:);
-
-                    % Make the mask
-                    maski = maski./maski;
-                    maski(isnan(maski)) = 0;
-                    maski = logical(maski);
-
-                    % Normalize the data in the range of approx 0 - 1 for better numerical stability
-                    kdatai = kdatai/max(abs(kdatai(:)));
-
-                    % Coil sensitivity map
-                    [nx,ny,nz,~,nc] = size(kdatai);
-                    b1 = ones(nx,ny,nz,nc);
-
-                    % Data
-                    param.y = kdatai;
-
-                    % Reconstruction design matrix
-                    param.E = Emat_zyxt(maski,b1);
-
-                    % Total variation (TV) constraint in the temporal domain & Wavelet in spatial domain
-                    param.TV = TVOP3D;
-                    param.TVWeight = TVd/8;
-
-                    % Wavelet
-                    param.W = Wavelet('Daubechies',12,12);
-                    param.L1Weight = LambdaWavelet;
-
-                    % Number of iterations, 2 x 10 iterations
-                    param.nite = 5;  %10
-                    param.nouter = 1;  %2
-                    param.totaliterations = param.nouter * param.nite * dims;
-
-                    % Linear reconstruction
-                    kdata1 = randn(size(kdatai))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
-                    recon_dft = param.E'*kdata1;
-
-                    % Iterative reconstruction
-                    recon_cs = recon_dft;
-                    for n = 1:param.nouter
-                        [recon_cs,param.iteration] = CSL1NlCg(app,recon_cs,param);
-                    end
-                    imageTmp = recon_cs;
-
-                    % Output reconstructed image
-                    if dimd == 1
-                        imageOut = imageTmp(:,:,:,1);
-                    else
-                        imageOut = imageTmp(:,:,:,:);
-                    end
-
-                    % Flip dimensions to correct orientation
-                    if obj.PHASE_ORIENTATION == 1
-                        imageOut = flip(imageOut,1);
-                    end
-
-                    % Images are shifted by 1 pixel in each dimension,
-                    % could use tweaking
-                    imageOut = circshift(imageOut,1,1);
-                    imageOut = circshift(imageOut,-1,2);
-                    imageOut = circshift(imageOut,1,3);
-
-                    % Return the images object
-                    imageSlab(:,:,:,:,slab) = imageOut;
-
+                % Interpolate in the dynamics dimension
+                if ndimD ~= dimD
+                    kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimD/dimD 1 1 1 1],'cubic');
+                    ndimD = size(kSpace,4);
+                    app.NREditField.Value = ndimD;
                 end
 
-                % Combine slabs with overlap if present
-                if dims>1
+                % Preallocate output images
+                imageSlab = zeros(ndimX,ndimY,ndimZ,ndimD,dimF,dimE,dimS);
 
-                    nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
+                % Initialize progress counter
+                app.totalCounter = dimS*dimE*dimF;
+                app.progressCounter = 0;
 
-                    overlap = app.SlabOverlapEditField.Value;
-                    if overlap > nrDiscard
-                        overlap = nrDiscard;
-                        app.SlabOverlapEditField.Value = overlap;
-                        app.TextMessage(sprintf('WARNING: Max slab overlap = %d pixels ...',overlap));
-                    end
-                    nrDiscard = nrDiscard - overlap;
+                % Slab loop
+                slab = 0;
+                while (slab < dimS) && ~app.stopReco_flag
+                    slab = slab + 1;
 
-                    imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                    imageSlab(:,:,1:nrDiscard,:,:) = [];
-                    avgSlab = ones(size(imageSlab));
+                    % Echo loop
+                    echo = 0;
+                    while (echo < dimE) && ~app.stopReco_flag
+                        echo = echo + 1;
 
-                    % Resulting image size + 2 * overlap on the image borders
-                    dimzs = size(imageSlab,3);
-                    totaldimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
+                        % flip-angle loop
+                        fa = 0;
+                        while (fa < dimF) && ~app.stopReco_flag
+                            fa = fa + 1;
 
-                    imageMultiSlab = zeros(ndimx,ndimy,totaldimzs,dimd);
-                    avgMultiSlab = zeros(ndimx,ndimy,totaldimzs,dimd);
+                            % Fool the reco if dimd = 1, it needs at least 2 dynamics
+                            if ndimD == 1
+                                kSpace(:,:,:,2,fa,echo,slab,:) = kSpace(:,:,:,1,fa,echo,slab,:);
+                                kData = zeros(dimX,dimY,dimZ,2,dimC);
+                                kMask = zeros(dimX,dimY,dimZ,2);
+                            else
+                                kData = zeros(dimX,dimY,ndimD,dimC);
+                                kMask = zeros(dimX,dimY,ndimD);
+                            end
 
-                    % Concatenate the overlapping matrices
-                    z1 = 1;
-                    for i = 1:dims
-                        z2 = z1 + dimzs;
-                        imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
-                        avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
-                        z1 = z2 - 2*overlap;
-                    end
+                            % Kspace of slab
+                            kData(:,:,:,:,:) = kSpace(:,:,:,:,fa,echo,slab,:);
+                            kMask(:,:,:,:) = logical(abs(kSpace(:,:,:,:,fa,echo,slab,1)));
 
-                    % Average the overlap
-                    imageMultiSlab = imageMultiSlab./avgMultiSlab;
+                            % Zero-fill or crop x-dimension
+                            if ndimX > dimX
+                                padSizeX = round((ndimX - dimX)/2);
+                                kDatai = padarray(kData,[padSizeX,0,0,0,0],'both');
+                                maski = padarray(kMask,[padSizeX,0,0,0],'both');
+                            else
+                                cropSize = round((dimX - ndimX)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kData(cropSize+1:end-cropSize,:,:,:,:);
+                                maski = kMask(cropSize+1:end-cropSize,:,:,:);
+                            end
 
-                    % Remove the overlap on the multi-slab beginning and end
-                    imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
+                            % Zero-fill or crop y-dimension
+                            if ndimY > dimY
+                                padSizeY = round((ndimY - dimY)/2);
+                                kDatai = padarray(kDatai,[0,padSizeY,0,0,0],'both');
+                                maski = padarray(maski,[0,padSizeY,0,0],'both');
+                            else
+                                cropSize = round((dimY - ndimY)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kDatai(:,cropSize+1:end-cropSize,:,:,:);
+                                maski = maski(:,cropSize+1:end-cropSize,:,:);
+                            end
 
-                else
+                            % Zero-fill or crop z-dimension
+                            if ndimZ > dimZ
+                                padSizeZ = round((ndimZ - dimZ)/2);
+                                kDatai = padarray(kDatai,[0,0,padSizeZ,0,0],'both');
+                                maski = padarray(maski,[0,0,padSizeZ,0],'both');
+                            else
+                                cropSize = round((dimZ - ndimZ)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kDatai(:,:,cropSize+1:end-cropSize,:,:);
+                                maski = maski(:,:,cropSize+1:end-cropSize,:);
+                            end
 
-                    % Only 1 image slab
-                    imageMultiSlabOutput = imageSlab(:,:,:,:,1);
+                            % Make sure dimensions are exactly ndimx, ndimy, ndimz
+                            kDatai = kDatai(1:ndimX,1:ndimY,1:ndimZ,:,:);
+                            maski = maski(1:ndimX,1:ndimY,1:ndimZ,:);
 
-                end
+                            % Normalize the data in the range of approx 0 - 1 for better numerical stability
+                            kDatai = kDatai/max(abs(kDatai(:)));
 
-                % Fake coil sensitivities
+                            % Coil sensitivity map
+                            for coil = 1:dimC
+                                b1(:,:,:,coil) = ones(ndimX,ndimY,ndimZ)*obj.coilSensitivities(coil);
+                            end
+
+                            % Data
+                            param.y = kDatai;
+
+                            % Reconstruction design matrix
+                            param.E = Emat_zyxt(maski,b1);
+
+                            % Total variation (TV) constraint in the temporal domain & Wavelet in spatial domain
+                            param.TV = TVOP3D;
+                            param.TVWeight = TVd/10;
+
+                            % Wavelet
+                            param.W = Wavelet('Daubechies',12,12);
+                            param.L1Weight = LambdaWavelet;
+
+                            % Number of iterations, 2 x 5 iterations
+                            param.nite = 5;
+                            param.nouter = 1;
+
+                            % Linear reconstruction
+                            kDataLin = randn(size(kDatai))/2000 + kDatai;  % add a little bit of randomness, such that linear reco is not exactly right
+                            reconDFT = param.E'*kDataLin;
+
+                            % Iterative reconstruction
+                            reconCS = reconDFT;
+                            for n = 1:param.nouter
+                                reconCS = CSL1NlCg(reconCS,param);
+                            end
+                            imageTmp = reconCS;
+
+                            % Output reconstructed image
+                            if dimD == 1
+                                imageOut(:,:,:,:,fa,echo,slab) = imageTmp(:,:,:,1);
+                            else
+                                imageOut(:,:,:,:,fa,echo,slab) = imageTmp(:,:,:,:);
+                            end
+
+                            % Flip dimensions to correct orientation
+                            if obj.PHASE_ORIENTATION == 1
+                                imageOut = flip(imageOut,1);
+                            end
+
+                            % Images are shifted by 1 pixel in each dimension,
+                            % could use tweaking
+                            imageOut = circshift(imageOut,1,1);
+                            imageOut = circshift(imageOut,-1,2);
+                            imageOut = circshift(imageOut,1,3);
+
+                            % Return the images object
+                            imageSlab(:,:,:,:,fa,echo,slab) = imageOut(:,:,:,:,fa,echo,slab);
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
+                        end % flip-angle loop
+
+                    end % echo-time loop
+
+                end % slab loop
+
+                % Make coil sensitivity maps
                 for coil = 1:obj.maxCoils
                     if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageMultiSlabOutput));
+                        obj.sensitivityMaps{coil} = ones(size(imageSlab))*obj.coilSensitivities(coil);
                     else
-                        obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageMultiSlabOutput));
+                        obj.sensitivityMaps{coil} = zeros(size(imageSlab));
                     end
                 end
-              
-                % Return the image objects
-                obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
-                obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
-                obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageMultiSlabOutput);
-                obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlabOutput);
+
+            end % bart/matlab reco
+
+            % Combine slabs with overlap if present
+            if dimS > 1
+
+                nrDiscard = round(-0.5*ndimZ*obj.SQLsliceGap/obj.SLICE_THICKNESS);
+                overlap = app.SlabOverlapEditField.Value;
+                if overlap > nrDiscard
+                    overlap = nrDiscard;
+                    app.SlabOverlapEditField.Value = overlap;
+                    app.TextMessage(sprintf('WARNING: Max slab overlap = %d pixels ...',overlap));
+                end
+                nrDiscard = nrDiscard - overlap;
+
+                imageSlab(:,:,ndimZ-nrDiscard+1:ndimZ,:,:,:,:) = [];
+                imageSlab(:,:,1:nrDiscard,:,:,:,:) = [];
+                avgSlab = ones(size(imageSlab));
+
+                % Resulting image size + 2 * overlap on the image borders
+                dimzs = size(imageSlab,3);
+                totalDimzs = dimS*dimzs - 2*dimS*overlap + 2*overlap;
+
+                imageMultiSlab = zeros(ndimX,ndimY,totalDimzs,ndimD,dimF,dimE);
+                avgMultiSlab = zeros(ndimX,ndimY,totalDimzs,ndimD,dimF,dimE);
+
+                % Concatenate the overlapping matrices
+                z1 = 1;
+                for slab = 1:dimS
+                    z2 = z1 + dimzs;
+                    imageMultiSlab(:,:,z1:z2-1,:,:,:) = imageMultiSlab(:,:,z1:z2-1,:,:,:) + imageSlab(:,:,:,:,:,:,slab);
+                    avgMultiSlab(:,:,z1:z2-1,:,:,:) = avgMultiSlab(:,:,z1:z2-1,:,:,:) + avgSlab(:,:,:,:,:,:,slab);
+                    z1 = z2 - 2*overlap;
+                end
+
+                % Average the overlap
+                imageMultiSlab = imageMultiSlab./avgMultiSlab;
+
+                % Remove the overlap on the multi-slab beginning and end
+                imagesOut = imageMultiSlab(:,:,overlap+1:end-overlap,:,:,:);
+
+            else
+
+                % Only 1 image slab
+                imagesOut = imageSlab(:,:,:,:,:,:,1);
 
             end
+
+            % Return the image objects
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % csReco3D
 
@@ -3607,119 +3604,145 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: FFT 3D
         % ---------------------------------------------------------------------------------
-        function obj = fftReco3D(obj, app, flipAngle, echoTime)
+        function obj = fftReco3D(obj, app)
 
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime,:);
-            end
-
-            % kSpaceRaw = {coil}[X Y slices dynamics, 1 , 1, slab]
-            %                    1 2    3      4      5   6    7
-            dimx = size(kSpaceRaw{1},1);
-            dimy = size(kSpaceRaw{1},2);
-            dimz = size(kSpaceRaw{1},3);
-            dimd = size(kSpaceRaw{1},4);
-            dims = size(kSpaceRaw{1},7);
+            % Dimensions = {coil}[X Y slices dynamics, flip-angle , echo-time, slab]
+            %                     1 2    3      4         5            6         7
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            dimD = size(obj.rawKspace{1},4);
+            dimF = size(obj.rawKspace{1},5);
+            dimE = size(obj.rawKspace{1},6);
+            dimS = size(obj.rawKspace{1},7);
+            dimC = obj.nrCoils;
 
             % Requested dimensions
-            ndimx = app.XEditField.Value;
-            ndimy = app.YEditField.Value;
-            ndimz = app.ZEditField.Value;
-            ndimd = app.NREditField.Value;
-
-            % Interpolate the time dimension if requested
-            for i = 1:obj.nrCoils
-                if dimd ~= ndimd
-                    kSpaceRaw{i} = permute(kSpaceRaw{i},[4,1,2,3,5,6,7]);
-                    kSpaceRaw{i} = imresize(kSpaceRaw{i},[ndimd,dimx]);
-                    kSpaceRaw{i} = permute(kSpaceRaw{i},[2,3,4,1,5,6,7]);
-                end
+            ndimX = app.XEditField.Value;
+            ndimY = app.YEditField.Value;
+            ndimZ = dimZ;
+            if dimZ > 1
+                ndimZ = app.ZEditField.Value;
+            else
+                app.ZEditField.Value = 1;
+            end
+            ndimd = dimD;
+            if dimD > 1
+                ndimd = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
             end
 
-            % Kspace data x,y,z,dynamics,coils
-            kSpace = zeros(dimx,dimy,dimz,ndimd,1,1,dims,obj.nrCoils);
-            for i = 1:obj.nrCoils
-                if app.AutoSensitivityCheckBox.Value
-                    kSpace(:,:,:,:,:,:,:,i) = kSpaceRaw{i}*obj.coilActive_flag(i);
-                else
-                    kSpace(:,:,:,:,:,:,:,i) = kSpaceRaw{i}*obj.coilSensitivities(i)*obj.coilActive_flag(i);
-                end
+            % K-space data x,y,z,dynamics,flip-angles, echo-times, slabs, coils
+            kSpace = zeros(dimX,dimY,dimZ,dimD,dimF,dimE,dimS,dimC);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
-            % Preallocate
-            imageSlab = zeros(ndimx,ndimy,ndimz,ndimd,dims);
+            % Interpolate in the dynamics dimension
+            if ndimd ~= dimD
+                kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimD 1 1 1 1],'cubic');
+                ndimd = size(kSpace,4);
+                app.NREditField.Value = ndimd;
+            end
+
+            % Preallocate output images
+            imageSlab = zeros(ndimX,ndimY,ndimZ,ndimd,dimF,dimE,dimS);
+
+            % Initialize progress counter
+            app.totalCounter = dimS*dimE*dimF*ndimd;
+            app.progressCounter = 0;
 
             % Slab loop
-            for slab = 1:dims
+            slab = 0;
+            while (slab < dimS) && ~app.stopReco_flag
+                slab = slab + 1;
 
-                % Dynamic loop
-                for dynamic = 1:ndimd
+                % Echo loop
+                echo = 0;
+                while (echo < dimE) && ~app.stopReco_flag
+                    echo = echo + 1;
 
-                    % Kspace of dynamic
-                    kData = squeeze(kSpace(:,:,:,dynamic,1,1,slab,:));
+                    % flip-angle loop
+                    fa = 0;
+                    while (fa < dimF) && ~app.stopReco_flag
+                        fa = fa + 1;
 
-                    % Zero-fill or crop x-dimension
-                    if ndimx > dimx
-                        padSizex = round((ndimx - dimx)/2);
-                        kDatai = padarray(kData,[padSizex,0,0],'both');
-                    else
-                        cropSize = round((dimx - ndimx)/2)-1;
-                        cropSize(cropSize<0)=0;
-                        kDatai = kData(cropSize+1:end-cropSize,:,:,:);
-                    end
+                        % Dynamic loop
+                        dynamic = 0;
+                        while (dynamic < ndimd) && ~app.stopReco_flag
+                            dynamic = dynamic + 1;
 
-                    % Zero-fill or crop y-dimension
-                    if ndimy > dimy
-                        padSizey = round((ndimy - dimy)/2);
-                        kDatai = padarray(kDatai,[0,padSizey,0],'both');
-                    else
-                        cropSize = round((dimy - ndimy)/2)-1;
-                        cropSize(cropSize<0)=0;
-                        kDatai = kDatai(:,cropSize+1:end-cropSize,:,:);
-                    end
+                            % Kspace of dynamic
+                            kDataIn = squeeze(kSpace(:,:,:,dynamic,fa,echo,slab,:));
 
-                    % Zero-fill or crop z-dimension
-                    if ndimz > dimz
-                        padSizez = round((ndimz - dimz)/2);
-                        kDatai = padarray(kDatai,[0,0,padSizez],'both');
-                    else
-                        cropSize = round((dimz - ndimz)/2)-1;
-                        cropSize(cropSize<0)=0;
-                        kDatai = kDatai(:,:,cropSize+1:end-cropSize,:);
-                    end
+                            % Zero-fill or crop x-dimension
+                            if ndimX > dimX
+                                padSizex = round((ndimX - dimX)/2);
+                                kDatai = padarray(kDataIn,[padSizex,0,0],'both');
+                            else
+                                cropSize = round((dimX - ndimX)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kDataIn(cropSize+1:end-cropSize,:,:,:);
+                            end
 
-                    % Make sure dimensions are exactly ndimx, ndimy, coils
-                    kDatai = kDatai(1:ndimx,1:ndimy,1:ndimz,:);
+                            % Zero-fill or crop y-dimension
+                            if ndimY > dimY
+                                padSizey = round((ndimY - dimY)/2);
+                                kDatai = padarray(kDatai,[0,padSizey,0],'both');
+                            else
+                                cropSize = round((dimY - ndimY)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kDatai(:,cropSize+1:end-cropSize,:,:);
+                            end
 
-                    % FFT
-                    imageIm = zeros(ndimx,ndimy,ndimz,obj.nrCoils);
-                    for coil = 1:obj.nrCoils
-                        imageIm(:,:,:,coil) = proudData.fft3Dmri(squeeze(kDatai(:,:,:,coil)));
-                    end
+                            % Zero-fill or crop z-dimension
+                            if ndimZ > dimZ
+                                padSizez = round((ndimZ - dimZ)/2);
+                                kDatai = padarray(kDatai,[0,0,padSizez],'both');
+                            else
+                                cropSize = round((dimZ - ndimZ)/2)-1;
+                                cropSize(cropSize<0)=0;
+                                kDatai = kDatai(:,:,cropSize+1:end-cropSize,:);
+                            end
 
-                    % Sum of squares coil dimension
-                    imageIm = rssq(imageIm,4);
+                            % Make sure dimensions are exactly ndimx, ndimy, coils
+                            kDatai = kDatai(1:ndimX,1:ndimY,1:ndimZ,:);
 
-                    % Return the image
-                    imageSlab(:,:,:,dynamic,slab) = imageIm;
+                            % 3D FFT
+                            image3D = obj.fft3Dmri(kDatai);
 
-                end
+                            % Sum of squares coil dimension
+                            image3D = rssq(image3D,4);
 
-            end
+                            % Return the image
+                            imageSlab(:,:,:,dynamic,fa,echo,slab) = image3D;
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
+                        end % dynamic loop
+
+                    end % flip-angle loop
+
+                end % echo-time loop
+
+            end % slab loop
 
             % Flip dimensions to correct orientation
-            if obj.PHASE_ORIENTATION == 1
-                imageSlab = flip(flip(imageSlab,3),2);
-            else
-                imageSlab = flip(flip(flip(imageSlab,3),2),1);
+            imageSlab = flip(flip(imageSlab,3),2);
+            if obj.PHASE_ORIENTATION == 0
+                imageSlab = flip(imageSlab,1);
             end
 
             % Combine slabs with overlap if present
-            if dims > 1
+            if dimS > 1
 
-                nrDiscard = round(-0.5*ndimz*obj.SQLsliceGap/obj.SLICE_THICKNESS);
-
+                nrDiscard = round(-0.5*ndimZ*obj.SQLsliceGap/obj.SLICE_THICKNESS);
                 overlap = app.SlabOverlapEditField.Value;
                 if overlap > nrDiscard
                     overlap = nrDiscard;
@@ -3728,58 +3751,53 @@ classdef proudData
                 end
                 nrDiscard = nrDiscard - overlap;
 
-                imageSlab(:,:,ndimz-nrDiscard+1:ndimz,:,:) = [];
-                imageSlab(:,:,1:nrDiscard,:,:) = [];
+                imageSlab(:,:,ndimZ-nrDiscard+1:ndimZ,:,:,:,:) = [];
+                imageSlab(:,:,1:nrDiscard,:,:,:,:) = [];
                 avgSlab = ones(size(imageSlab));
 
                 % Resulting image size + 2 * overlap on the image borders
                 dimzs = size(imageSlab,3);
-                totalDimzs = dims*dimzs - 2*dims*overlap + 2*overlap;
+                totalDimzs = dimS*dimzs - 2*dimS*overlap + 2*overlap;
 
-                imageMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
-                avgMultiSlab = zeros(ndimx,ndimy,totalDimzs,ndimd);
+                imageMultiSlab = zeros(ndimX,ndimY,totalDimzs,ndimd,dimF,dimE);
+                avgMultiSlab = zeros(ndimX,ndimY,totalDimzs,ndimd,dimF,dimE);
 
                 % Concatenate the overlapping matrices
                 z1 = 1;
-                for i = 1:dims
-
+                for slab = 1:dimS
                     z2 = z1 + dimzs;
-
-                    imageMultiSlab(:,:,z1:z2-1,:) = imageMultiSlab(:,:,z1:z2-1,:) + imageSlab(:,:,:,:,i);
-                    avgMultiSlab(:,:,z1:z2-1,:) = avgMultiSlab(:,:,z1:z2-1,:) + avgSlab(:,:,:,:,i);
-
+                    imageMultiSlab(:,:,z1:z2-1,:,:,:) = imageMultiSlab(:,:,z1:z2-1,:,:,:) + imageSlab(:,:,:,:,:,:,slab);
+                    avgMultiSlab(:,:,z1:z2-1,:,:,:) = avgMultiSlab(:,:,z1:z2-1,:,:,:) + avgSlab(:,:,:,:,:,:,slab);
                     z1 = z2 - 2*overlap;
-
                 end
 
                 % Average the overlap
                 imageMultiSlab = imageMultiSlab./avgMultiSlab;
 
                 % Remove the overlap on the multi-slab beginning and end
-                imageMultiSlabOutput = imageMultiSlab(:,:,overlap+1:end-overlap,:);
-
+                imagesOut = imageMultiSlab(:,:,overlap+1:end-overlap,:,:,:);
 
             else
 
                 % Only 1 image slab
-                imageMultiSlabOutput = imageSlab(:,:,:,:,1);
+                imagesOut = imageSlab(:,:,:,:,:,:,1);
 
             end
 
-            % Fake coil sensitivities
+            % Make coil sensitivity maps
             for coil = 1:obj.maxCoils
                 if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageMultiSlabOutput));
+                    obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
                 else
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageMultiSlabOutput));
+                    obj.sensitivityMaps{coil} = zeros(size(imagesOut));
                 end
             end
-        
+
             % Return the image objects
-            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageMultiSlabOutput;
-            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageMultiSlabOutput);
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageMultiSlabOutput);
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime)  = angle(imageMultiSlabOutput);
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % fftReco3D
 
@@ -3789,89 +3807,157 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: compressed sensing 2D Radial
         % ---------------------------------------------------------------------------------
-        function obj = Reco2DRadialCS(obj, app, flipAngle, echoTime)
+        function obj = Reco2DRadialCS(obj, app)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
             TVxyz = app.TVxyzEditField.Value;
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
-            dimc = obj.nrCoils;
+         
+            % Dimensions
+            dimR = size(obj.rawKspace{1},1);    % Readout
+            dimS = size(obj.rawKspace{1},2);    % Spokes
+            dimZ = size(obj.rawKspace{1},3);    % Slices
+            dimD = size(obj.rawKspace{1},4);    % Dynamics
+            dimF = size(obj.rawKspace{1},5);    % Flip-angles
+            dimE = size(obj.rawKspace{1},6);    % Echo-times
+            dimC = obj.nrCoils;                 % Coils
 
-            % Original kx, ky, slices, dynamics  (X, Y, Z, NR, NFA, NE)
-            kSpaceRaw = cell(dimc);
-            for i=1:dimc
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
+            % Requested new dimensions
+            ndimX = app.XEditField.Value;
+            if rem(ndimX,2)
+                ndimX = ndimX + 1;
+                app.XEditField.Value = ndimX;
+            end
+            ndimY = app.YEditField.Value;
+            if rem(ndimY,2)
+                ndimY = ndimY + 1;
+                app.YEditField.Value = ndimY;
+            end
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+
+            % Slice interpolation not implemented
+            app.ZEditField.Value = dimZ;
+
+            % Kspace data x,y,slice,dynamic,flipangle,echotime,coils
+            kSpace = zeros(dimR,dimS,dimZ,dimD,dimF,dimE,dimC);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil};
             end
 
             % Averages
             averages = obj.nsaSpace;
+         
+            % Initialize progress counter
+            app.RecoProgressGauge.Value = 0;
+            app.totalCounter = dimE*dimF*dimD*dimZ + 5*dimE*dimF*dimZ + app.DensityCorrectCheckBox.Value*dimE*dimF*dimD*dimZ + ...
+                (nnz(obj.coilActive_flag)>1)*app.AutoSensitivityCheckBox.Value*dimZ;
+            app.progressCounter = 0;
 
-            % Center echo and/or phase correction
-            interpFactor = 16;
-            dimx = size(kSpaceRaw{1},1);
-            for coil = 1:dimc
-                for dimy = 1:size(kSpaceRaw{coil},2)
-                    for slice = 1:size(kSpaceRaw{coil},3)
-                        for dynamic = 1:size(kSpaceRaw{coil},4)
-                            if app.CenterEchoCheckBox.Value
-                                tmpKline1 = kSpaceRaw{coil}(:,dimy,slice,dynamic);
-                                tmpKline2 = interp(tmpKline1,interpFactor);
-                                [~,kCenter] = max(abs(tmpKline2));
-                                kShift = floor(dimx/2)-kCenter/interpFactor;
-                                tmpKline1 = fraccircshift(tmpKline1,kShift);
-                                kSpaceRaw{coil}(:,dimy,slice,dynamic) = tmpKline1;
+            % Center echo and/or phase correction, tukey filter
+            app.TextMessage("Preparing data for reconstruction ....");
+            tukFilter = tukeywin(dimR,2*obj.tukeyFilterWidth);
+            interpFactor = 4;
+            centerEchoFlag = app.CenterEchoCheckBox.Value;
+            phaseCorrectionFlag = app.PhaseCorrectCheckBox.Value;
+            amplitudeFlag = app.AmplitudeCorrectionCheckBox.Value;
+            tukeyFlag = app.TukeyFilterCheckBox.Value;
+            middle = floor(dimR/2);
+
+            for echo = 1:dimE
+
+                for fa = 1:dimF
+
+                    for dynamic = 1:dimD
+
+                        for slice = 1:dimZ
+
+                            meanKspace = 1; % otherwise parfor does not start
+                            if amplitudeFlag
+                                mm1 = abs(kSpace(:,:,slice,dynamic,fa,echo,:));
+                                mm2 = max(mm1);
+                                meanKspace = mean(mm2(:));
                             end
-                            if app.PhaseCorrectCheckBox.Value
-                                tmpKline1 = kSpaceRaw{coil}(:,dimy,slice,dynamic);
-                                kCenterPhase = angle(tmpKline1(floor(dimx/2)+1));
-                                tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
-                                kSpaceRaw{coil}(:,dimy,slice,dynamic) = tmpKline1;
+               
+                            for coil = 1:dimC
+
+                                parfor spoke = 1:dimS
+
+                                    if centerEchoFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        tmpKline2 = interp(tmpKline1,interpFactor);
+                                        [~,kCenter] = max(abs(tmpKline2));
+                                        kShift = middle-kCenter/interpFactor;
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = fraccircshift(tmpKline1,kShift);
+                                    end
+
+                                    if phaseCorrectionFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        kCenterPhase = angle(tmpKline1(middle+1));
+                                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = tmpKline1;
+                                    end
+
+                                    if amplitudeFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = meanKspace*tmpKline1/max(abs(tmpKline1(:)));
+                                    end
+
+                                    if tukeyFlag
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = kSpace(:,spoke,slice,dynamic,fa,echo,coil).*tukFilter;
+                                    end
+
+                                end
+
                             end
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
                         end
+
                     end
+
                 end
+
             end
 
-            % Apply Tukey filter (again, after shift)
-            filterWidth = 0.1;
-            tmpFilter = tukeywin(dimx,filterWidth);
-            for coil = 1:dimc
-                tukeyFilter(:,1,1,1) = tmpFilter;
-                kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
+            % Corrected k-space
+            for coil = 1:dimC
+                obj.rawKspace{coil} = kSpace(:,:,:,:,:,:,coil);
+            end
+            obj = obj.scaleKspace;
+
+            % Re-estimate global coil sensitivities
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+                obj = obj.estimateCoilSensitivies(app);
             end
 
-            % Requested sizes
-            dimx = app.XEditField.Value;
-            dimy = size(obj.rawKspace{1},2); % original value for now, later interpolated
-            dimz = app.ZEditField.Value;
-            dimd = app.NREditField.Value;
-
-            % Resize k-space to requested size (kx, ky, slice, nr) by interpolation
-            for i=1:dimc
-                kSpaceRaw{i} = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],kSpaceRaw{i});
-            end
-            averages = bart(app,['resize -c 0 ',num2str(dimx),' 2 ',num2str(dimz),' 3 ',num2str(dimd)],averages);
-
-            % kx, ky, slices, dynamics, coils
-            for i = 1:dimc
-                kSpace(:,:,:,:,i) = kSpaceRaw{i};
+            % Apply global coil sensitivity correction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
             % Calibration and density correction size
-            kdim = round(dimx/2);
-            if mod(kdim,2) == 1
-                kdim = kdim + 1;
-            end
+            kdim = round(dimR/2);
             kdim(kdim < 32) = 32;
-            kdim(kdim > dimx) = dimx;
             calibSize = [kdim, kdim, 1];
             cSize = ['-d',num2str(calibSize(1)),':',num2str(calibSize(2)),':1'];
-            app.TextMessage(strcat('Calibration size = ',{' '},num2str(kdim)));
+            app.TextMessage(strcat("K-space calibration size = ",num2str(kdim),"x",num2str(kdim)," ..."));
 
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
-            traj = proudData.twoDradialTrajectory(dimx, dimy, dimz, dimd, dimc);
+            traj = obj.twoDradialTrajectory(dimR, dimS, dimZ, dimD, dimF, dimE);
 
             % Bart dimensions  Bart   Matlab
             % 	READ_DIM,       0       1   x
@@ -3890,18 +3976,18 @@ classdef proudData
             % 	SLICE_DIM,      13      14  slices
             % 	AVG_DIM,        14      15
 
-            %           1      2        3        4       5
-            % Initially x, y(spokes), slices, dynamics, coils
+            %           1      2        3        4          5           6        7
+            % Initially x, y(spokes), slices, dynamics, flip-angle, echo-time, coils
 
             %                            1 readout spokes
             % Rearrange for BART         1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            kSpacePics = permute(kSpace,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
+            kSpacePics = permute(kSpace,[8, 1, 2, 7, 9, 6, 5,10,11,12,13,4 ,14, 3]);
 
             % Rearrange for BART        1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            avgPics = permute(averages,[6, 1, 2, 5, 7, 8, 9,10,11,12,13, 4,14, 3]);
+            avgPics = permute(averages,[8, 1, 2, 7, 9, 6, 5,10,11,12,13,4, 14, 3]);
 
             % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            trajPics = permute(traj,[1, 2, 3, 6, 7, 8, 9,10,11,12,13, 5,14, 4]);
+            trajPics = permute(traj,[1, 2, 3, 8, 9, 7, 6,10,11,12,13, 5,14,4]);
 
             % Gradient delay vector from app
             dTotal(1) = app.GxDelayEditField.Value;
@@ -3911,11 +3997,9 @@ classdef proudData
 
             % Gradient delay calibration
             if app.GradDelayCalibrationCheckBox.Value
-
-                % Calculate k-space and trajectory sum of all frames
-                % and dynamics, remove all zero values
-                kSpacePicsSum = sum(kSpacePics(:,:,:,:,:,:,:,:,:,:,:,:,:,floor(dimz/2)+1),[11,12]);
-                trajPicsSum = sum(trajPics(:,:,:,:,:,:,:,:,:,:,:,:,:,floor(dimz/2)+1),[11,12]);
+          
+                kSpacePicsRing = kSpacePics(1,:,:,:,1,1,1,1,1,1,1,floor(dimD/2)+1,1,floor(dimZ/2)+1);
+                trajPicsRing = trajPics(:,:,:,1,1,1,1,1,1,1,1,floor(dimD/2)+1,1,floor(dimZ/2)+1);
 
                 % Ring method
                 if app.RingMethodCheckBox.Value
@@ -3930,7 +4014,7 @@ classdef proudData
 
                         dTotal = [];
 
-                        delaysBart = bart(app,'estdelay -r5 ',trajPicsSum,kSpacePicsSum);
+                        delaysBart = bart(app,'estdelay -r5 ',trajPicsRing,kSpacePicsRing);
 
                         % Remove unkown warning
                         ff = strfind(delaysBart,"[0m");
@@ -3942,7 +4026,7 @@ classdef proudData
 
                         delaysBart = strrep(delaysBart,':',',');
                         dTotal = -str2num(delaysBart);
-                        
+
                     catch ME
 
                         app.TextMessage(ME.message);
@@ -3979,22 +4063,22 @@ classdef proudData
                     try
 
                         % Calibration size
-                        kSize = [6,6];
-                        kSkip = round(length(kSpacePicsSum)/2000);
+                        kSize = [10,10];
+                        kSkip = round(length(kSpacePicsRing)/2000);
                         kSkip(kSkip < 1) = 1;
 
                         % M1:M2 = indices in trajectory for which k-space value <= calibSize
-                        [~,zm] = find(squeeze(trajPicsSum(1,:,:)) == max(trajPicsSum(:)),1,'first');
+                        [~,zm] = find(squeeze(trajPicsRing(1,:,:)) == max(trajPicsRing(:)),1,'first');
                         if isempty(zm)
-                            [~,zm] = find(squeeze(trajPicsSum(2,:,:)) == max(trajPicsSum(:)),1,'first');
+                            [~,zm] = find(squeeze(trajPicsRing(2,:,:)) == max(trajPicsRing(:)),1,'first');
                         end
-                        M = find(sqrt(trajPicsSum(1,:,zm).^2+trajPicsSum(2,:,zm).^2) <= calibSize(1)/2);
+                        M = find(sqrt(trajPicsRing(1,:,zm).^2+trajPicsRing(2,:,zm).^2) <= calibSize(1)/2);
                         M1 = M(1);
                         M2 = M(end);
 
                         % Reduce size for gradient calibration
-                        kTrajCalib = trajPicsSum(:,M1:M2,1:kSkip:end);
-                        dataCalib = kSpacePicsSum(1,M1:M2,1:kSkip:end);
+                        kTrajCalib = trajPicsRing(:,M1:M2,1:kSkip:end);
+                        dataCalib = kSpacePicsRing(1,M1:M2,1:kSkip:end);
                         app.TextMessage(strcat('Calibration trajectory length = ',{' '},num2str(length(kTrajCalib))));
 
                         % Set initial delays to zero
@@ -4011,17 +4095,17 @@ classdef proudData
                         kCalib = obj.fft2Dmri(imCalib);
                         wnRank = 0.4;
                         rank = floor(wnRank*prod(kSize));
-                        app.TextMessage(strcat('Rank = ',{' '},num2str(rank)));
+                        app.TextMessage(strcat("Rank = ",num2str(rank)));
 
                         % Data consistency
-                        y = squeeze(dataCalib);
+                        spoke = squeeze(dataCalib);
                         xOld = kCalib;
 
                         % Prepare for manual stop
                         app.stopGradCal_flag = false;
 
                         % Iterative method with Bart
-                        while  (iteration<300) && (incre>0.001) && ~app.stopGradCal_flag
+                        while  (iteration<50) && (incre>0.001) && ~app.stopGradCal_flag
 
                             % Iteration number
                             iteration = iteration + 1;
@@ -4030,20 +4114,20 @@ classdef proudData
                             % Solve for X
                             rank(rank>prod(kSize)) = prod(kSize);
                             xNew = obj.lowRankThresh2D(xOld,kSize,rank);
-                            % rank = rank+0.05;
+                            rank = rank+0.05;
                             % app.TextMessage(strcat('Rank :',{' '},num2str(rank)));
 
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
-                            dataCalib = bart(app,'bart nufft -l 0.01',kTraj,kNew);
-                            kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) dimc]);
+                            dataCalib = bart(app,'bart nufft -l 0.05',kTraj,kNew);
+                            kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) 1]);
 
                             % Partial derivatives
                             [dydtx,dydty] = obj.partialDerivative2D(app,kTraj,xNew,calibSize);
 
                             % Direct solver
                             dydt = [real(obj.vec(dydtx)) real(obj.vec(dydty)) ; imag(obj.vec(dydtx)) imag(obj.vec(dydty))];
-                            dStep = ((dydt)'*dydt)\(dydt' * [real(obj.vec(kNew - y)) ; imag(obj.vec(kNew - y))]);
+                            dStep = ((dydt)'*dydt)\(dydt' * [real(obj.vec(kNew - spoke)) ; imag(obj.vec(kNew - spoke))]);
                             dStep(isnan(dStep)) = 0;
 
                             % The accumalated delays
@@ -4056,18 +4140,19 @@ classdef proudData
                             incre = norm(real(dStep));
 
                             % Message
-                            app.TextMessage(strcat('Estimated delays:',{' '},num2str(dTotal(1)),':',num2str(dTotal(2))));
+                            app.TextMessage(strcat("Estimated delays ",num2str(dTotal(1))," : ",num2str(dTotal(2))));
 
                             % Sent gradient delay vector back to app
                             app.GxDelayEditField.Value = double(round(dTotal(1),5));
                             app.GyDelayEditField.Value = double(round(dTotal(2),5));
                             app.GzDelayEditField.Value = 0;
+                            drawnow;
 
                             % Interpolation to update trajectory with new delays
                             kTraj = obj.trajInterpolation(kTrajCalib,dTotal);
 
                             % The new image with k-space updated for gradient delays
-                            imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M2-M1+1 size(kTrajCalib,3) dimc]));
+                            imCalib = bart(app,['bart nufft -i -l 0.05 ',cSize,' -t'],kTraj,reshape(spoke,[1 M2-M1+1 size(kTrajCalib,3) 1]));
 
                             % Show image
                             im = squeeze(abs(imCalib(:,:)));
@@ -4092,9 +4177,9 @@ classdef proudData
                         app.TextMessage('Gradient delay estimation failed ...');
                         app.SetStatus(1);
                         dTotal = zeros(3,1);
-                        app.GxDelayEditField.Value = double(dTotal(1));
-                        app.GyDelayEditField.Value = double(dTotal(2));
-                        app.GzDelayEditField.Value = double(dTotal(3));
+                        app.GxDelayEditField.Value = double(round(dTotal(1),5));
+                        app.GyDelayEditField.Value = double(round(dTotal(2),5));
+                        app.GzDelayEditField.Value = double(round(dTotal(3),5));
 
                     end
 
@@ -4107,42 +4192,138 @@ classdef proudData
             end % Gradient calibration
 
             % Final gradient delay correction from optimization or values from app
-            trajPics = permute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
+            trajPics = permute(trajPics,[1 2 3 12 14 6 7 4 5 8 9 10 11 13]);
             trajPics = obj.trajInterpolation(trajPics,dTotal);
-            trajPics = ipermute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
-
-            % Sensitivity maps
-            if dimc > 1
-                kSpacePicsSum = sum(kSpacePics,[11,12]);
-                trajPicsSum = sum(trajPics,[11,12]);
-                ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
-                kSpacePicsSum = kSpacePicsSum(:,:,ze);
-                trajPicsSum = trajPicsSum(:,:,ze);
-                app.TextMessage('Calculating coil sensitivity maps ...');
-                lowResImage = bart(app,['nufft -i -l2 ',cSize,' -t'], trajPicsSum, kSpacePicsSum);
-                lowResKspace = bart(app,'fft -u 7', lowResImage);
-                kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dimy),' 1 ',num2str(dimx)], lowResKspace);
-                sensitivities = bart(app,'ecalib -S -t0.002 -m1', kSpaceZeroFilled);
-            else
-                sensitivities = ones(dimx,dimy,1,dimc,1,1,1,1,1,1,1,1,1,dimz);
-            end
+            trajPics = ipermute(trajPics,[1 2 3 12 14 6 7 4 5 8 9 10 11 13]);
 
             % Density correction
             if app.DensityCorrectCheckBox.Value
+
                 app.TextMessage('Calculating density correction ...');
+
+                % Make sure densityOnes contains only 1's when data is available
                 densityOnes = ones(size(kSpacePics));
-                densityOnes = densityOnes.*avgPics; % Make sure densityOnes contains only 1's when data is available
+                densityOnes = densityOnes(:,:,:,1,:,:,:,:,:,:,:,:,:,:).*avgPics(:,:,:,1,:,:,:,:,:,:,:,:,:,:);
                 densityOnes(densityOnes > 1) = 1;
-                densityTmp = bart(app,strcat('nufft -d',num2str(dimx),':',num2str(dimy),':1 -a'),trajPics,densityOnes);
-                densityPics = bart(app,'nufft ',trajPics,densityTmp);
-                densityPics = densityPics.^(-1/2);
-                densityPics(isnan(densityPics)) = 0;
-                densityPics(isinf(densityPics)) = 0;
+
+                for echo = 1:dimE
+                    for fa = 1:dimF
+                        for dynamic = 1:dimD
+                            for slice = 1:dimZ
+
+                                d = densityOnes(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,slice);
+                                t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,slice);
+
+                                densityTmp = bart(app,strcat('nufft -d',num2str(dimR),':',num2str(dimS),':1 -a'),t,d);
+                                densityTmp = bart(app,'nufft ',t,densityTmp);
+                                densityTmp = densityTmp.^(-1/2);
+                                densityTmp(isnan(densityTmp)) = 0;
+                                densityTmp(isinf(densityTmp)) = 0;
+                                densityPics(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,slice) = densityTmp;
+
+                                % Report on progress
+                                app.progressCounter = app.progressCounter + 1;
+                                app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                                drawnow;
+
+                            end
+                        end
+                    end
+                end
+
             end
 
+            % Coils sensitivity maps
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+
+                % ESPIRiT reconstruction
+                TextMessage(app,'ESPIRiT reconstruction ...');
+
+                % Calculate coil sensitivity maps with ecalib bart function, per slice
+                app.TextMessage('Calculating coil sensitivity maps ...');
+           
+                % Pre-allocate
+                sensitivities = ones(dimR,dimR,1,dimC,1,1,1,1,1,1,1,dimD,1,dimZ);
+           
+                for slice = 1:dimZ
+
+                    kSpacePicsSense = kSpacePics(:,:,:,:,:,1,1,:,:,:,:,end,:,slice);
+                    trajPicsSense = trajPics(:,:,:,:,:,1,1,:,:,:,:,end,:,slice);
+
+                    try
+
+                        % Convert to cartesian k-space by nufft reconstruction
+                        for coil = 1:dimC
+                            lowResImage = bart(app,['nufft -i -l2 ',cSize,' -t'], trajPicsSense, kSpacePicsSense(1,:,:,coil));
+                            lowResKspace = bart(app,'fft -u 7', lowResImage);
+                            kSpaceZeroFilled(1,:,:,coil) = bart(app,['resize -c 0 ',num2str(dimR),' 1 ',num2str(dimR)], lowResKspace);
+                        end
+
+                        % Calculate the senstivity maps
+                        sense = bart(app,'ecalib -d2 -S -I -a -m1', kSpaceZeroFilled);
+
+                    catch ME
+                        
+                        app.TextMessage(ME.message);
+                        app.TextMessage("Coil sensitivity error, using uniform sensitivities ...");
+                        sense = zeros(1,dimR,dimR,dimC);
+                        for coil = 1:obj.maxCoils
+                            if logical(obj.coilActive_flag(coil))
+                                sense(1,:,:,coil) = obj.coilSensitivities(coil);
+                            end
+                        end
+
+                    end
+
+                    for dynamic = 1:dimD
+                        sensitivities(:,:,1,:,1,1,1,1,1,1,1,dynamic,1,slice) = sense(1,:,:,:);
+                    end
+
+                    % Report on progress
+                    app.progressCounter = app.progressCounter + 1;
+                    app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                    drawnow;
+
+                end
+
+            else
+
+                sensitivities = zeros(dimR,dimR,1,dimC,1,1,1,1,1,1,1,dimD,1,dimZ);
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil))
+                        sensitivities(:,:,1,coil,1,1,1,1,1,1,1,:,1,:) = obj.coilSensitivities(coil);
+                    end
+                end
+
+            end
+       
+            % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, fa, echo ...
+            senseMap = abs(sensitivities);
+            senseMap = senseMap/max(senseMap(:));
+            if obj.PHASE_ORIENTATION == 0
+                senseMap = flip(flip(senseMap,2),1);
+            end
+
+            for coil = 1:obj.maxCoils
+                for echo = 1:dimE
+                    for fa = 1:dimF
+                        for dynamic = 1:dimD
+                            for slice = 1:dimZ
+                                if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimC) && (dynamic <= dimD)
+                                    obj.sensitivityMaps{coil}(:,:,slice,dynamic,fa,echo) = senseMap(:,:,1,coil,1,1,1,1,1,1,1,1,1,slice);
+                                else
+                                    obj.sensitivityMaps{coil}(:,:,slice,dynamic,fa,echo) = zeros(size(senseMap(:,:,1,1,1,1,1,1,1,1,1,1,1,slice)));
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+         
             % Prepare the 2D radial PICS reconstruction
             app.TextMessage('PICS reconstruction ...');
-            picsCommand = 'pics -S -i24 -e -d5 ';
+            picsCommand = 'pics -S -i24 -e -d2 ';
             if LW>0
                 picsCommand = [picsCommand,' -RW:6:0:',num2str(LW)];
             end
@@ -4151,7 +4332,7 @@ classdef proudData
             end
             if LR>0
                 % Locally low-rank in the spatial domain
-                blockSize = round(dimx/16);  % Block size
+                blockSize = round(dimR/16);  % Block size
                 blockSize(blockSize<8) = 8;
                 picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blockSize),' -N '];
             end
@@ -4159,46 +4340,80 @@ classdef proudData
                 picsCommand = [picsCommand,' -R',obj.totalVariation,':2048:0:',num2str(TVd)];
             end
 
-            % The actual reconstruction
-            if app.DensityCorrectCheckBox.Value
-                igrid = bart(app,picsCommand,'-p',densityPics,'-t',trajPics,kSpacePics,sensitivities);
-            else
-                igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
-            end
+            % Actual reconstruction
+            echo = 0;
+            while (echo < dimE) && ~app.stopReco_flag
+                echo = echo + 1;
 
-            % Root sum of squares over all coils
-            recoImage = sum(igrid,[4,5]);
+                fa = 0;
+                while (fa < dimF) && ~app.stopReco_flag
+                    fa = fa + 1;
 
-            % Interpolate to desired dimy if necessary
-            if dimy ~= size(igrid,3)
-                dimy = app.YEditField.Value;
-                fiGrid = bart(app,'fft 2',recoImage);
-                fiGrid = bart(app,['resize -c 1 ',num2str(dimy)],fiGrid);
-                igrid = bart(app,'fft -i 2',fiGrid);
-            end
+                    slice = 0;
+                    while (slice < dimZ) && ~app.stopReco_flag
+                        slice = slice + 1;
 
-            % Rearrange to orientation: x, y, slices, dynamics
-            imageOut = permute(igrid,[1, 2, 14, 12, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13]);
+                        if app.DensityCorrectCheckBox.Value
 
-            % Flip for phase-orientation is vertical
-            if obj.PHASE_ORIENTATION == 0
-                imageOut = flip(flip(imageOut,2),1);
-            end
+                                % [1 dimx spokes 1 1 1 1 1 1 1 1 dynamics 1 1]
+                                d = densityPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,slice);
+                                % [1 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                                k = kSpacePics(:,:,:,logical(obj.coilActive_flag),1,echo,fa,1,1,1,1,:,1,slice);
+                                 % [3 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                                t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,slice);
+                                % [dimx dimy 1 coils 1 1 1 1 1 1 1 1 1 1]
+                                s = sensitivities(:,:,1,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,slice);
 
-            % Fake coil sensitivities
-            for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageOut));
-                else
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageOut));
+                                reco = bart(app,picsCommand,'-p',d,'-t',t,k,s);
+                                iGrid(:,:,1,1,1,echo,fa,1,1,1,1,:,1,slice) = reco;
+                         
+                        else
+
+                                % [1 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                                k = kSpacePics(:,:,:,logical(obj.coilActive_flag),1,echo,fa,1,1,1,1,:,1,slice);
+                                % [3 dimx spokes 1 1 1 1 1 1 1 1 dynamics 1 1]
+                                t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,slice);
+                                % [dimx dimy 1 coils 1 1 1 1 1 1 1 1 1 1]
+                                s = sensitivities(:,:,1,logical(obj.coilActive_flag),1,1,1,1,1,1,1,:,1,slice);
+
+                                reco = bart(app,picsCommand,'-t',t,k,s);
+                                iGrid(:,:,1,1,1,echo,fa,1,1,1,1,:,1,slice) =  squeeze(reco);
+                            
+                        end
+
+                        % Report on progress
+                        app.progressCounter = app.progressCounter + 5;
+                        app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                        drawnow;
+
+                    end
                 end
             end
-       
+
+            % Rearrange to orientation: x, y, slices, dynamics, flip-angle, echo-time
+            imagesOut = permute(iGrid,[1, 2, 14, 12, 7, 6, 3, 4, 5, 8, 9, 10, 11, 13]);
+
+            % Interpolate to requested dimensions
+            if ndimX ~= dimR || ndimY ~= dimR || ndimD ~= dimD
+                imagesOut = obj.matrixInterpolate(imagesOut,[ndimX/dimR ndimY/dimR 1 ndimD/dimD 1 1 1],'cubic');
+                ndimX = size(imagesOut,1);
+                ndimY = size(imagesOut,2);
+                ndimD = size(imagesOut,4);
+                app.XEditField.Value = ndimX;
+                app.YEditField.Value = ndimY;
+                app.NREditField.Value = ndimD;
+            end
+     
+            % Flip for phase-orientation is vertical
+            if obj.PHASE_ORIENTATION == 0
+                imagesOut = flip(flip(imagesOut,2),1);
+            end
+
             % Return the image objects
-            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
-            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % csRecoRadial
 
@@ -4208,65 +4423,146 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: NUFFT 2D Radial
         % ---------------------------------------------------------------------------------
-        function obj = Reco2DRadialNUFFT(obj, app, flipAngle, echoTime)
+        function obj = Reco2DRadialNUFFT(obj, app)
 
-            % Original kx, ky, slices, dynamics
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
+            % Dimensions
+            dimR = size(obj.rawKspace{1},1);        % Readout
+            dimS = size(obj.rawKspace{1},2);        % Spokes
+            dimZ = size(obj.rawKspace{1},3);        % Slices
+            app.ZEditField.Value = dimZ;
+            dimD = size(obj.rawKspace{1},4);        % Dynamics
+            dimF = size(obj.rawKspace{1},5);        % Flip-angles
+            dimE = size(obj.rawKspace{1},6);        % Echo-times
+            dimC = obj.nrCoils;                     % Coils
+
+            % Requested sizes
+            ndimX = app.XEditField.Value;
+            if rem(ndimX,2)
+                ndimX = ndimX + 1;
+                app.XEditField.Value = ndimX;
+            end
+            ndimY = app.YEditField.Value;
+            if rem(ndimY,2)
+                ndimY = ndimY + 1;
+                app.YEditField.Value = ndimY;
+            end
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+          
+            % K-space data readout,spokes,slices,dynamics,flip-angles,echo-times,coils
+            kSpace = zeros(dimR,dimS,dimZ,dimD,dimF,dimE,dimC);
+
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil};
             end
 
-            % Image dimensions
-            [dimx, dimy, dimz, dimd] = size(kSpaceRaw{1});
+            % Averages
+            averages = obj.nsaSpace;
 
-            % Requested dimensions
-            % Slice and dynamic dimensions are put back to original values
-            ndimx = app.XEditField.Value;
-            ndimy = app.YEditField.Value;
-            app.ZEditField.Value = dimz;
-            app.NREditField.Value = dimd;
+            % Initialize progress counter
+            app.RecoProgressGauge.Value = 0;
+            app.totalCounter = dimE*dimF*dimD*dimZ + dimZ*dimD*dimE*dimF;
+            app.progressCounter = 0;
 
-            % Center echo and/or phase correction
-            interpFactor = 16;
-            for coil = 1:obj.nrCoils
-                for spokes = 1:size(kSpaceRaw{coil},2)
-                    for slice = 1:size(kSpaceRaw{coil},3)
-                        for dynamic = 1:size(kSpaceRaw{coil},4)
-                            if app.CenterEchoCheckBox.Value
-                                tmpKline1 = kSpaceRaw{coil}(:,spokes,slice,dynamic);
-                                tmpKline2 = interp(tmpKline1,interpFactor);
-                                [~,kCenter] = max(abs(tmpKline2));
-                                kShift = floor(dimx/2)-kCenter/interpFactor;
-                                tmpKline1 = fraccircshift(tmpKline1,kShift);
-                                kSpaceRaw{coil}(:,spokes,slice,dynamic) = tmpKline1;
+            % Center echo and/or phase correction, tukey filter
+            app.TextMessage("Preparing data for reconstruction ....");
+            tukFilter = tukeywin(dimR,2*obj.tukeyFilterWidth);
+            interpFactor = 4;
+            centerEchoFlag = app.CenterEchoCheckBox.Value;
+            phaseCorrectionFlag = app.PhaseCorrectCheckBox.Value;
+            amplitudeFlag = app.AmplitudeCorrectionCheckBox.Value;
+            tukeyFlag = app.TukeyFilterCheckBox.Value;
+            middle = floor(dimR/2);
+
+            for echo = 1:dimE
+
+                for fa = 1:dimF
+
+                    for dynamic = 1:dimD
+
+                        for slice = 1:dimZ
+
+                            meanKspace = 1; % otherwise parfor does not start
+                            if amplitudeFlag
+                                mm1 = abs(kSpace(:,:,slice,dynamic,fa,echo,:));
+                                mm2 = max(mm1);
+                                meanKspace = mean(mm2(:));
                             end
-                            if app.PhaseCorrectCheckBox.Value
-                                tmpKline1 = kSpaceRaw{coil}(:,spokes,slice,dynamic);
-                                kCenterPhase = angle(tmpKline1(floor(dimx/2)+1));
-                                tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
-                                kSpaceRaw{coil}(:,spokes,slice,dynamic) = tmpKline1;
+             
+                            for coil = 1:dimC
+
+                                parfor spoke = 1:dimS
+  
+                                    if centerEchoFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        tmpKline2 = interp(tmpKline1,interpFactor);
+                                        [~,kCenter] = max(abs(tmpKline2));
+                                        kShift = middle-kCenter/interpFactor;
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = fraccircshift(tmpKline1,kShift);
+                                    end
+
+                                    if phaseCorrectionFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        kCenterPhase = angle(tmpKline1(middle+1));
+                                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = tmpKline1;
+                                    end
+
+                                    if amplitudeFlag
+                                        tmpKline1 = kSpace(:,spoke,slice,dynamic,fa,echo,coil);
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = meanKspace*tmpKline1/max(abs(tmpKline1(:)));
+                                    end
+
+                                    if tukeyFlag
+                                        kSpace(:,spoke,slice,dynamic,fa,echo,coil) = kSpace(:,spoke,slice,dynamic,fa,echo,coil).*tukFilter;
+                                    end
+
+                                end
+
                             end
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
                         end
+
                     end
+
                 end
+
             end
 
-            % Apply Tukey filter (again, after shift)
-            filterWidth = 0.25;
-            tmpFilter = tukeywin(dimx,filterWidth);
-            for coil = 1:obj.nrCoils
-                tukeyFilter(:,1,1,1) = tmpFilter;
-                kSpaceRaw{coil} = kSpaceRaw{coil}.*tukeyFilter;
+            % Corrected k-space
+            for coil = 1:dimC
+                obj.rawKspace{coil} = kSpace(:,:,:,:,:,:,coil);
+            end
+            obj = obj.scaleKspace;
+
+            % Re-estimate global coil sensitivities
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+                obj = obj.estimateCoilSensitivies(app);
+            end
+
+            % Apply global coil sensitivity correction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
             fullAngle = 180;
-            for j = 1:dimy
+            for spoke = 1:dimS
                 % crds, x, y(spoke)
-                traj(1,:,j) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(j-1)*fullAngle/dimy);
-                traj(2,:,j) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(j-1)*fullAngle/dimy);
-                traj(3,:,j) = 0;
+                traj(1,:,spoke) = (-floor(dimR/2)+0.5:floor(dimR/2)-0.5)*cos((pi/180)*(spoke-1)*fullAngle/dimS);
+                traj(2,:,spoke) = (-floor(dimR/2)+0.5:floor(dimR/2)-0.5)*sin((pi/180)*(spoke-1)*fullAngle/dimS);
+                traj(3,:,spoke) = 0;
             end
 
             % Gradient delays from app
@@ -4284,63 +4580,91 @@ classdef proudData
             weight = [];    % data weighting (optional)
             partial = 0.5;  % Tikhobov penalty on ||imag(x))||
 
-            % Progress gauge
-            loops = dimz*dimd*obj.nrCoils;
-            app.RecoProgressGauge.Value = 0;
+            % Pre-allocate image
+            imagesOut = zeros(dimR,dimR,dimZ,dimD,dimF,dimE);
 
-            cnt = 1;
+            % Actual reconstruction
+            echo = 0;
+            while (echo < dimE) && ~app.stopReco_flag
+                echo = echo + 1;
 
-            for slice = 1:dimz
+                fa = 0;
+                while (fa < dimF) && ~app.stopReco_flag
+                    fa = fa + 1;
 
-                for dynamic = 1:dimd
+                    dynamic = 0;
+                    while (dynamic < dimD) && ~app.stopReco_flag
+                        dynamic = dynamic + 1;
 
-                    % NOTE: coils can be incorporated in the NUFFT, need data first
-                    for coil = 1:obj.nrCoils
+                        slice = 0;
+                        while (slice < dimZ) && ~app.stopReco_flag
+                            slice = slice + 1;
 
-                        objn = nufft_3d(traj,dimx,app);
+                            objNufft = nufft_3d(traj,dimR,app);
 
-                        data = kSpaceRaw{coil}(:,:,slice,dynamic);
-                        data = data(:);
+                            data = kSpace(:,:,slice,dynamic,fa,echo,logical(obj.coilActive_flag));
+                            data = reshape(data,dimR*dimS,nnz(obj.coilActive_flag));
 
-                        reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
+                            image2D = squeeze(objNufft.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
 
-                        reco = imresize(reco,[ndimy ndimx]);
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
 
-                        image(:,:,slice,dynamic,coil) = reco;
+                            % Coil combine
+                            if dimC>1
+                                imageTmp(:,:,1,1,:) = image2D;
+                                try
+                                    reco = coilCombine_mex(imageTmp);
+                                catch
+                                    reco = coilCombine(imagesTmp);
+                                end
+                            else
+                                reco = image2D;
+                            end
 
-                        app.RecoProgressGauge.Value = round(100*cnt/loops);
-                        drawnow;
+                            % Resized image
+                            imagesOut(:,:,slice,dynamic,fa,echo) = reco;
+
+                        end
 
                     end
 
-                    cnt = cnt + 1;
-
                 end
 
             end
 
-            % Sum of coil dimension
-            imageOut = sum(image,5);
+            % Interpolate to requested dimensions
+            if ndimX ~= dimR || ndimY ~= dimR || ndimD ~= dimD
+                imagesOut = obj.matrixInterpolate(imagesOut,[ndimX/dimR ndimY/dimR 1 ndimD/dimD 1 1 1],'cubic');
+                ndimX = size(imagesOut,1);
+                ndimY = size(imagesOut,2);
+                ndimD = size(imagesOut,4);
+                app.XEditField.Value = ndimX;
+                app.YEditField.Value = ndimY;
+                app.NREditField.Value = ndimD;
+            end
 
             % Flip for phase-orientation is vertical
             if obj.PHASE_ORIENTATION == 0
-                imageOut = flip(flip(imageOut,2),1);
+                imagesOut = flip(flip(imagesOut,2),1);
             end
 
-            % Fake coil sensitivities
+            % Make coil sensitivities
             for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = ones(size(imageOut));
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
+                    obj.sensitivityMaps{coil} = ones(dimR,dimR,dimZ,dimD,dimF,dimE)*obj.coilSensitivities(coil);
                 else
-                    obj.sensitivityMaps{coil}(:,:,:,:,flipAngle,echoTime) = zeros(size(imageOut));
+                    obj.sensitivityMaps{coil} = zeros(dimR,dimR,dimZ,dimD,dimF,dimE);
                 end
             end
-        
+
             % Return the image objects
-            obj.complexImages(:,:,:,:,flipAngle,echoTime) = imageOut;
-            obj.images(:,:,:,:,flipAngle,echoTime) = abs(imageOut);
-            obj.phaseImages(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
-            obj.phaseImagesOrig(:,:,:,:,flipAngle,echoTime) = angle(imageOut);
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % Reco2DRadialNUFFT
 
@@ -4351,7 +4675,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: CS 3D UTE with BART
         % ---------------------------------------------------------------------------------
-        function obj = Reco3DuteCS(obj, app, flipAngle, echoTime)
+        function obj = Reco3DuteCS(obj, app)
 
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
@@ -4359,16 +4683,7 @@ classdef proudData
             LR = app.LRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
             dimc = obj.nrCoils;
-            obj.totalVariation = 'T'; % Use total variation, instead of TGV
-
-            % Original kx(readout), ky(spokes), 1, dynamics, flip-angle, echo-time
-            kSpaceRaw = cell(dimc);
-            for i=1:dimc
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,:,flipAngle,echoTime);
-            end
-
-            % Averages
-            averages = obj.nsaSpace;
+            TVtype = 'T'; % Use total variation, instead of TGV
 
             % Gradient delays from app
             dTotal(1) = app.GxDelayEditField.Value;
@@ -4376,89 +4691,153 @@ classdef proudData
             dTotal(3) = app.GzDelayEditField.Value;
             offset = app.DataOffsetRadialEditField.Value;
 
-            % Data size
-            dimx = size(obj.rawKspace{1},1);
-            dimy = size(obj.rawKspace{1},2);
-            dimd = app.NREditField.Value;
+            % Data dimensions
+            dimX = size(obj.rawKspace{1},1);    % spoke readout
+            dimS = size(obj.rawKspace{1},2);    % number of spokes
+            dimD = size(obj.rawKspace{1},4);    % dynamics
+            dimF = size(obj.rawKspace{1},5);    % flip-angles
+            dimE = size(obj.rawKspace{1},6);    % echo times
+            dimC = obj.nrCoils;                 % coils
 
+            % Requested dimensions
+            ndimX = app.XEditField.Value;
+            ndimY = app.YEditField.Value;
+            ndimZ = app.ZEditField.Value;
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+          
             % K-space radial spokes
-            dims = length(obj.gradTrajectory);
-            traj = zeros(3,dims,dimy,dimd);
-            for i=1:dimc
-                for g = 1:dimd
-                    for cnt = 1:dimy
-                        traj(1,:,cnt,g,i) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
-                        traj(2,:,cnt,g,i) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
-                        traj(3,:,cnt,g,i) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
-                    end
-                end
+            dimT = length(obj.gradTrajectory);
+            traj = zeros(3,dimT,dimS);
+            for cnt = 1:dimS
+                traj(1,:,cnt) = dimT*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                traj(2,:,cnt) = dimT*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                traj(3,:,cnt) = dimT*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
             end
 
             % Check if offset is not too large, if so reduce size
             offset(offset < 0) = 0;
-            offset(offset > (dimx - dims)) = dimx - dims;
+            offset(offset > (dimX - dimT)) = dimX - dimT;
             app.DataOffsetRadialEditField.Value = offset;
 
-            % Resize k-space and remove offset
-            for i = 1:dimc
-                kSpace{i}(:,:,:,:) = kSpaceRaw{i}(1+offset:dims+offset,:,:,:);
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil};
             end
-            averages = averages(1+offset:dims+offset,:,:,:);
 
-            % Resize k-space to requested dynamic size by interpolation
-            for i=1:dimc
-                kSpace{i} = bart(app,['resize -c 3 ',num2str(dimd)],kSpace{i});
-            end
-            averages = bart(app,['resize -c 3 ',num2str(dimd)],averages);
-            traj = bart(app,['resize -c 3 ',num2str(dimd)],traj);
+            % Averages
+            averages = obj.nsaSpace;
 
-            % Auto shift to maximum intensity at first data point
-            if app.CenterEchoCheckBox.Value
-                interpFactor = 16;
-                for coil = 1:dimc
-                    for dynamic = 1:dimd
-                        for spoke = 1:dimy
-                            tmpKline1 = kSpace{coil}(:,spoke,1,dynamic);
-                            tmpKline2 = interp(tmpKline1,interpFactor);
-                            [~,kCenter] = max(abs(tmpKline2));
-                            kShift = 1-kCenter/interpFactor;
-                            discard = ceil(abs(kShift));
-                            tmpKline1 = fraccircshift(tmpKline1,kShift);
-                            tmpKline1(end-discard:end) = 0;
-                            kSpace{coil}(:,spoke,1,dynamic) = tmpKline1;
+            % Remove data offset
+            kSpace = kSpace(1+offset:dimT+offset,:,:,:,:,:,:);
+            averages = averages(1+offset:dimT+offset,:,:,:);
+
+            % Initialize progress counter
+            app.RecoProgressGauge.Value = 0;
+            app.totalCounter = 1 + app.GradDelayCalibrationCheckBox.Value + dimE*dimF*dimD*app.DensityCorrectCheckBox.Value + 1 + dimE*dimF;
+            app.progressCounter = 0;
+
+            % Corrections
+            app.TextMessage("Preparing data for reconstruction ....");
+            tukFilter = tukeywin(2*dimT,obj.tukeyFilterWidth);
+            tukFilter = tukFilter(dimT+1:2*dimT);
+            interpFactor = 4;
+            centerEchoFlag = app.CenterEchoCheckBox.Value;
+            phaseCorrectionFlag = app.PhaseCorrectCheckBox.Value;
+            amplitudeFlag = app.AmplitudeCorrectionCheckBox.Value;
+            tukeyFlag = app.TukeyFilterCheckBox.Value;
+
+            for echo = 1:dimE
+
+                for fa = 1:dimF
+
+                    for dynamic = 1:dimD
+
+                        meanKspace = 1; % otherwise parfor does not start
+                        if amplitudeFlag
+                            mm1 = abs(kSpace(:,:,1,dynamic,fa,echo,:));
+                            mm2 = max(mm1);
+                            meanKspace = mean(mm2(:));
                         end
-                    end
-                end
-            end
 
-            % Phase correction
-            if app.PhaseCorrectCheckBox.Value
-                interpFactor = 16;
-                for coil = 1:dimc
-                    for dynamic = 1:dimd
-                        for spoke = 1:dimy
-                            tmpKline1 = kSpace{coil}(:,spoke,1,dynamic);
-                            kCenterPhase = angle(tmpKline1(1));
-                            tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
-                            kSpace{coil}(:,spoke,1,dynamic) = tmpKline1;
+                        for coil = 1:dimC
+
+                            parfor spoke = 1:dimS
+
+                                if centerEchoFlag
+                                    % Auto shift to maximum intensity at first data point
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    tmpKline2 = interp(tmpKline1,interpFactor);
+                                    [~,kCenter] = max(abs(tmpKline2));
+                                    kShift = 1-kCenter/interpFactor;
+                                    discard = ceil(abs(kShift));
+                                    tmpKline1 = fraccircshift(tmpKline1,kShift);
+                                    tmpKline1(end-discard:end) = 0;
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = tmpKline1;
+                                end
+
+                                if phaseCorrectionFlag
+                                    % Phase correction and normalize
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    kCenterPhase = angle(tmpKline1(1));
+                                    tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = tmpKline1;
+                                end
+
+                                if amplitudeFlag
+                                    % Amplitude correction
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = meanKspace*tmpKline1/max(abs(tmpKline1(:)));
+                                end
+
+                                if tukeyFlag
+                                    % Tukey filter
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = kSpace(:,spoke,1,dynamic,fa,echo,coil).*tukFilter;
+                                end
+
+                            end
+
                         end
+
                     end
+
                 end
+
             end
 
-            % kx(readout), ky(spokes), 1, dynamics, coils
-            for i = 1:dimc
-                kSpacePics(:,:,1,:,i) = kSpace{i};
+            % Corrected k-space
+            for coil = 1:dimC
+                obj.rawKspace{coil} = kSpace(:,:,:,:,:,:,coil);
+            end
+            obj = obj.scaleKspace;
+
+            % Re-estimate global coil sensitivities
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+                obj = obj.estimateCoilSensitivies(app);
             end
 
+            % Apply global coil sensitivity correction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
+            end
+
+            % Report on progress
+            app.progressCounter = app.progressCounter + 1;
+            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+            drawnow;
+    
             % Bart dimensions  Bart   Matlab
             % 	READ_DIM,       0       1   x
             % 	PHS1_DIM,       1       2   y
             % 	PHS2_DIM,       2       3   z
             % 	COIL_DIM,       3       4   coils
             % 	MAPS_DIM,       4       5   sense maps
-            % 	TE_DIM,         5       6
-            % 	COEFF_DIM,      6       7
+            % 	TE_DIM,         5       6   echo time
+            % 	COEFF_DIM,      6       7   flip angle
             % 	COEFF2_DIM,     7       8
             % 	ITER_DIM,       8       9
             % 	CSHIFT_DIM,     9       10
@@ -4468,58 +4847,61 @@ classdef proudData
             % 	SLICE_DIM,      13      14  slices
             % 	AVG_DIM,        14      15
 
-            %           1      2        3        4       5
-            % Initially x, y(spokes),   1,    dynamics, coils
+            %           1      2        3        4          5           6        7
+            % Initially x, y(spokes),   1,    dynamics, flip-angle, echo-times, coils
 
-            %                                1 readout spokes coils .....    dynamics
-            % Rearrange for BART             1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            kSpacePics = permute(kSpacePics,[6, 1, 2, 5, 3, 7, 8, 9,10,11,12, 4,13,14]);
+            %                            1 readout spokes coils 1 echo flip angle 1 1 1 dynamics 1 1
+            % Rearrange for BART         1  2  3  4  5  6  7  8  9 10 11 12 13 14
+            kSpacePics = permute(kSpace,[3, 1, 2, 7, 8, 6, 5, 9,10,11,12, 4,13,14]);
 
             % Rearrange for BART        1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            avgPics = permute(averages,[6, 1, 2, 5, 3, 7, 8, 9,10,11,12, 4,13,14]);
+            avgPics = permute(averages,[3, 1, 2, 7, 8, 6, 5, 9,10,11,12, 4,13,14]);
 
             % Rearrange for BART     1  2  3  4  5  6  7  8  9 10 11 12 13 14
-            trajPics = permute(traj,[1, 2, 3, 5, 6, 7, 8, 9,10,11,12, 4,13,14]);
+            trajPics = permute(traj,[1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14]);
 
             % Calibration and density correction size
-            kdim = round(dims/3);
+            kdim = round(dimT/3);
             if mod(kdim,2) == 1
                 kdim = kdim + 1;
             end
             kdim(kdim < 32) = 32;
-            kdim(kdim > dimx) = dimx;
+            kdim(kdim > dimT) = dimT;
             calibSize = [kdim, kdim, kdim];
             cSize = ['-d',num2str(calibSize(1)),':',num2str(calibSize(2)),':',num2str(calibSize(3))];
-            app.TextMessage(strcat('Calibration size = ',{' '},num2str(kdim)));
+            app.TextMessage(strcat("Calibration size = ",num2str(kdim)));
 
             % Gradient delay calibration
             if app.GradDelayCalibrationCheckBox.Value
 
-                % K-space and trajectory sum
-                kSpacePicsSum = sum(kSpacePics,[11,12]);
-                trajPicsSum = sum(trajPics,[11,12]);
+                % Find the k-space for which signal is maximal, for best coil sensitivity estimation
+                ks = abs(kSpacePics);
+                [~,indx] = max(ks(:));
+                [~,~,~,cIdx,~,teIdx,faIdx,~,~,~,~,dynIdx,~,~] = ind2sub(size(ks),indx);
+                kSpacePicsRing = kSpacePics(1,:,:,cIdx,1,teIdx,faIdx,1,1,1,1,dynIdx,1,1);
+                trajPicsRing = trajPics(:,:,:,1,1,teIdx,faIdx,1,1,1,1,dynIdx,1,1);
 
                 % Calibration size
                 kSize = [6,6,6];
-                kSkip = round(length(kSpacePicsSum)/2000);
+                kSkip = round(length(kSpacePicsRing)/2000);
                 kSkip(kSkip < 1) = 1;
 
                 % M = index in trajectory for which k-space value >= calibSize
-                [~,zm] = find(squeeze(trajPicsSum(1,:,:)) == max(trajPicsSum(:)),1,'first');
+                [~,zm] = find(squeeze(trajPicsRing(1,:,:)) == max(trajPicsRing(:)),1,'first');
                 if isempty(zm)
-                    [~,zm] = find(squeeze(trajPicsSum(2,:,:)) == max(trajPicsSum(:)),1,'first');
+                    [~,zm] = find(squeeze(trajPicsRing(2,:,:)) == max(trajPicsRing(:)),1,'first');
                 end
                 if isempty(zm)
-                    [~,zm] = find(squeeze(trajPicsSum(3,:,:)) == max(trajPicsSum(:)),1,'first');
+                    [~,zm] = find(squeeze(trajPicsRing(3,:,:)) == max(trajPicsRing(:)),1,'first');
                 end
-                M = find(sqrt(trajPicsSum(1,:,zm).^2+trajPicsSum(2,:,zm).^2+trajPicsSum(3,:,zm).^2) >= calibSize(1,1)/2,1);
+                M = find(sqrt(trajPicsRing(1,:,zm).^2+trajPicsRing(2,:,zm).^2+trajPicsRing(3,:,zm).^2) >= calibSize(1,1)/2,1);
 
                 % Reduce size for gradient calibration
-                kTrajCalib = trajPicsSum(:,1:M,1:kSkip:end);
-                dataCalib = kSpacePicsSum(1,1:M,1:kSkip:end);
+                kTrajCalib = trajPicsRing(:,1:M,1:kSkip:end);
+                dataCalib = kSpacePicsRing(1,1:M,1:kSkip:end);
                 ze = squeeze(abs(dataCalib(1,1,:))) > 0;
                 kTrajCalib = kTrajCalib(:,:,ze);
-                app.TextMessage(strcat('Calibration trajectory length = ',{' '},num2str(length(kTrajCalib))));
+                app.TextMessage(strcat("Calibration trajectory length = ",num2str(length(kTrajCalib))," ..."));
 
                 % Interpolation to update trajectory with initial delays
                 kTrajCalib = proudData.trajInterpolation(kTrajCalib,dTotal);
@@ -4535,7 +4917,7 @@ classdef proudData
                 kCalib = proudData.fft3Dmri(imCalib);
                 wnRank = 0.8;
                 rank = floor(wnRank*prod(kSize));
-                app.TextMessage(strcat('Rank = ',{' '},num2str(rank)));
+                app.TextMessage(strcat("Rank = ",num2str(rank)," ..."));
 
                 % Data consistency
                 y = squeeze(dataCalib);
@@ -4548,15 +4930,15 @@ classdef proudData
                 dTotal = zeros(3,1);
 
                 % Calibration
-                while  (iteration<300)  && (incre>0.001) && ~app.stopGradCal_flag
+                while  (iteration<20)  && (incre>0.001) && ~app.stopGradCal_flag
 
                     % Iteration number
                     iteration = iteration + 1;
-                    app.TextMessage(strcat('Iteration:',{' '},num2str(iteration)));
+                    app.TextMessage(strcat("Iteration: ",num2str(iteration)));
 
                     % Solve for X
                     xNew = proudData.lowRankThresh3D(xOld,kSize,rank);
-                    rank = rank+0.2;
+                    % rank = rank+0.2;
                     rank(rank>prod(kSize)) = prod(kSize);
 
                     % NUFFT to get updated k-space data
@@ -4581,12 +4963,12 @@ classdef proudData
                     incre = norm(real(dStep));
 
                     % Message
-                    app.TextMessage(strcat('Estimated delays:',{' '},num2str(dTotal(1)),':',num2str(dTotal(2)),':',num2str(dTotal(3))));
+                    app.TextMessage(strcat("Estimated delays: ",num2str(dTotal(1)),":",num2str(dTotal(2)),":",num2str(dTotal(3))));
 
                     % Sent gradient delay vector back to app
-                    app.GxDelayEditField.Value = double(dTotal(1));
-                    app.GyDelayEditField.Value = double(dTotal(2));
-                    app.GzDelayEditField.Value = double(dTotal(3));
+                    app.GxDelayEditField.Value = double(round(dTotal(1),5));
+                    app.GyDelayEditField.Value = double(round(dTotal(2),5));
+                    app.GzDelayEditField.Value = double(round(dTotal(3),5));
 
                     % Interpolation to update trajectory with new delays
                     kTraj = proudData.trajInterpolation(kTrajCalib,dTotal);
@@ -4596,15 +4978,15 @@ classdef proudData
 
                     % Show image
                     im = squeeze(abs(imCalib(:,:,round(calibSize(3)/2),1)));
-                    im = flip(flip(im,1),2);
+                    im = flip(im,3);
                     if obj.PHASE_ORIENTATION
                         im = rot90(im,-1);
-                        daspect(app.RecoFig,[1 1 1]);
                     else
-                        daspect(app.RecoFig,[1 1 1]);
+                        im = flip(im,1);
                     end
                     xlim(app.RecoFig, [0 size(im,2)+1]);
                     ylim(app.RecoFig, [0 size(im,1)+1]);
+                    daspect(app.RecoFig,[1 1 1]);
                     imshow(rot90(im),[],'Parent',app.RecoFig);
 
                     % Calculate k-space from new image
@@ -4614,41 +4996,138 @@ classdef proudData
 
                 app.GradDelayCalibrationCheckBox.Value = 0;
 
+                % Report on progress
+                app.progressCounter = app.progressCounter + 1;
+                app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                drawnow;
+
             end % Gradient calibration
 
             % Final gradient delay correction from optimization or values from app
-            trajPics = permute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
+            trajPics = permute(trajPics,[1 2 3 12 14 6 7 4 5 8 9 10 11 13]);
             trajPics = obj.trajInterpolation(trajPics,dTotal);
-            trajPics = ipermute(trajPics,[1 2 3 11 12 14 4 5 6 7 8 9 10 13]);
-
-            % Coil sensitivities from sum of all frames and dynamics
-            if dimc > 1
-                kSpacePicsSum = sum(kSpacePics,[11,12]);
-                trajPicsSum = sum(trajPics,[11,12]);
-                ze = squeeze(abs(kSpacePicsSum(1,end,:))) > 0;
-                kSpacePicsSum = kSpacePicsSum(:,:,ze);
-                trajPicsSum = trajPicsSum(:,:,ze);
-                app.TextMessage('Calculating coil sensitivity maps ...');
-                lowResImage = bart(app,['nufft -i ',cSize,' -t'], trajPicsSum, kSpacePicsSum);
-                lowResKspace = bart(app,'fft -u 7', lowResImage);
-                kSpaceZeroFilled = bart(app,['resize -c 0 ',num2str(dims),' 1 ',num2str(dims),' 2 ',num2str(dims)], lowResKspace);
-                sensitivities = bart(app,'ecalib -S -t0.0005 -m1', kSpaceZeroFilled);
-            else
-                sensitivities = ones(dims,dims,dims,dimc,1,1,1,1,1,1,1,1,1,1);
-            end
+            trajPics = ipermute(trajPics,[1 2 3 12 14 6 7 4 5 8 9 10 11 13]);
 
             % Density correction
             if app.DensityCorrectCheckBox.Value
+
                 app.TextMessage('Calculating density correction ...');
+
+                % Make sure densityOnes contains only 1's when data is available
                 densityOnes = ones(size(kSpacePics));
-                densityOnes = densityOnes.*avgPics; % Make sure densityOnes contains only 1's when data is available
+                densityOnes = densityOnes(:,:,:,1,:,:,:,:,:,:,:,:,:,:).*avgPics(:,:,:,1,:,:,:,:,:,:,:,:,:,:);
                 densityOnes(densityOnes > 1) = 1;
-                densityTmp = bart(app,strcat('nufft -d',num2str(dims),':',num2str(dims),':',num2str(dims),' -a'),trajPics,densityOnes);
-                densityPics = bart(app,'nufft ',trajPics,densityTmp);
-                densityPics = densityPics.^(-1/3);
-                densityPics(isnan(densityPics)) = 0;
-                densityPics(isinf(densityPics)) = 0;
+
+                for echo = 1:dimE
+                    for fa = 1:dimF
+                        for dynamic = 1:dimD
+
+                            d = densityOnes(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,1);
+                            t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,1);
+
+                            densityTmp = bart(app,strcat('nufft -d',num2str(dimT),':',num2str(dimT),':',num2str(dimT),' -a'),t,d);
+                            densityPics = bart(app,'nufft ',t,densityTmp);
+                            densityTmp = bart(app,'nufft ',t,densityTmp);
+                            densityTmp = densityTmp.^(-1/3);
+                            densityTmp(isnan(densityTmp)) = 0;
+                            densityTmp(isinf(densityTmp)) = 0;
+                            densityPics(:,:,:,1,1,echo,fa,1,1,1,1,dynamic,1,1) = densityTmp;
+
+                            % Report on progress
+                            app.progressCounter = app.progressCounter + 1;
+                            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                            drawnow;
+
+                        end
+                    end
+                end
+
+            end % Density correction
+
+            % Coils sensitivity maps
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+
+                % ESPIRiT reconstruction
+                TextMessage(app,'ESPIRiT reconstruction ...');
+
+                % Calculate coil sensitivity maps with ecalib bart function, per slice
+                app.TextMessage('Calculating coil sensitivity maps ...');
+
+                sensitivities = ones(dimT,dimT,dimT,dimC,1,1,1,1,1,1,1,dimD,1,1);
+
+                % Find the k-space for which signal is maximal, for best coil sensitivity estimation
+                ks = abs(kSpacePics);
+                [~,indx] = max(ks(:));
+                [~,~,~,~,~,teIdx,faIdx,~,~,~,~,dynIdx,~,~] = ind2sub(size(ks),indx);
+                kSpacePicsSense = kSpacePics(:,:,:,:,:,teIdx,faIdx,:,:,:,:,dynIdx,:,:);
+                trajPicsSense = trajPics(:,:,:,:,:,teIdx,faIdx,:,:,:,:,dynIdx,:,:);
+
+                try
+
+                    for coil = 1:dimC
+                        lowResImage = bart(app,['nufft -i -l2 ',cSize,' -t'], trajPicsSense, kSpacePicsSense(:,:,:,coil));
+                        lowResKspace = bart(app,'fft -u 7', lowResImage);
+                        kSpaceZeroFilled(:,:,:,coil) = bart(app,['resize -c 0 ',num2str(dimT),' 1 ',num2str(dimT),' 2 ',num2str(dimT)], lowResKspace);
+                    end
+
+                    sense = bart(app,'ecalib -d1 -S -I -a -m1', kSpaceZeroFilled);
+
+                catch ME
+
+                    app.TextMessage(ME.message);
+                    app.TextMessage("Coil sensitivity error, using uniform sensitivities ...");
+                    sense = zeros(dimT,dimT,dimT,dimC);
+                    for coil = 1:obj.maxCoils
+                        if logical(obj.coilActive_flag(coil))
+                            sense(:,:,:,coil) = obj.coilSensitivities(coil);
+                        end
+                    end
+
+                end
+
+                for dynamic = 1:dimD
+                    sensitivities(:,:,:,:,1,1,1,1,1,1,1,dynamic,1,1) = sense;
+                end
+
+            else
+
+                sensitivities = zeros(dimT,dimT,dimT,dimC,1,1,1,1,1,1,1,ndimD,1,1);
+                for coil = 1:obj.maxCoils
+                    if logical(obj.coilActive_flag(coil))
+                        sensitivities(:,:,:,coil,1,1,1,1,1,1,1,:,1,1) = obj.coilSensitivities(coil);
+                    end
+                end
+
             end
+
+            % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, fa, echo ...
+            senseMap = abs(sensitivities);
+            senseMap = senseMap/max(senseMap(:));
+            senseMap = flip(senseMap,3);
+            if obj.PHASE_ORIENTATION == 0
+                senseMap = flip(senseMap,1);
+            end
+            for coil = 1:obj.maxCoils
+                for echo = 1:dimE
+                    for fa = 1:dimF
+                        for dynamic = 1:dimD
+                            if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimC) && (dynamic <= dimD)
+                                obj.sensitivityMaps{coil}(:,:,:,dynamic,fa,echo) = senseMap(:,:,:,coil,1,1,1,1,1,1,1,1,1,1);
+                            else
+                                obj.sensitivityMaps{coil}(:,:,:,dynamic,fa,echo) = zeros(size(senseMap(:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
+                            end
+                        end
+                    end
+                end
+            end
+
+            % Report on progress
+            app.progressCounter = app.progressCounter + 1;
+            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+            drawnow;
+
+            % Pre-allocate
+            imagesOut = zeros(dimT,dimT,dimT,dimD,dimF,dimE);
 
             % Prepare the PICS reconstruction
             app.TextMessage('PICS reconstruction ...');
@@ -4661,7 +5140,7 @@ classdef proudData
             end
             if LR>0
                 % Locally low-rank in the spatial domain
-                blockSize = round(dims/16);  % Block size
+                blockSize = round(dimT/16);  % Block size
                 blockSize(blockSize<8) = 8;
                 picsCommand = [picsCommand,' -RL:7:7:',num2str(LR),' -b',num2str(blockSize)];
             end
@@ -4669,48 +5148,75 @@ classdef proudData
                 picsCommand = [picsCommand,' -R',obj.totalVariation,':2048:0:',num2str(TVd)];
             end
 
-            % Do the Bart reco
-            if app.DensityCorrectCheckBox.Value
-                igrid = bart(app,picsCommand,'-t',trajPics,'-p',densityPics,kSpacePics,sensitivities);
-            else
-                igrid = bart(app,picsCommand,'-t',trajPics,kSpacePics,sensitivities);
-            end
+            % Actual reconstruction
+            echo = 0;
+            while (echo < dimE) && ~app.stopReco_flag
+                echo = echo + 1;
 
-            % Sum over coils
-            recoImage = sum(igrid,[4,5]);
+                fa = 0;
+                while (fa < dimF) && ~app.stopReco_flag
+                    fa = fa + 1;
 
-            % Interpolate to desired dimensions if requested
-            ndimx = app.XEditField.Value;
-            ndimy = app.YEditField.Value;
-            ndimz = app.ZEditField.Value;
-            [dimx, dimy, dimz, ~ ] = size(obj.images);
-            if (ndimx ~= dimx) || (ndimy ~= dimy) || (ndimz ~= dimz)
-                fiGrid = bart(app,'fft 7',recoImage);
-                fiGrid = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 2 ',num2str(ndimz)],fiGrid);
-                recoImage = bart(app,'fft -i 7',fiGrid);
+                    if app.DensityCorrectCheckBox.Value
+
+                        % [1 dimx spokes 1 1 1 1 1 1 1 1 dynamics 1 1]
+                        d = densityPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,1);
+                        % [1 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                        k = kSpacePics(:,:,:,logical(obj.coilActive_flag),1,echo,fa,1,1,1,1,:,1,1);
+                        % [3 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                        t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,1);
+                        % [dimx dimy 1 coils 1 1 1 1 1 1 1 1 1 1]
+                        s = sensitivities(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1);
+
+                        reco = bart(app,picsCommand,'-p',d,'-t',t,k,s);
+                        imagesOut(:,:,:,1,1,echo,fa,1,1,1,1,:,1,1) = reco;
+
+                    else
+
+                        % [1 dimx spokes coils 1 1 1 1 1 1 1 dynamics 1 1]
+                        k = kSpacePics(:,:,:,logical(obj.coilActive_flag),1,echo,fa,1,1,1,1,:,1,1);
+                        % [3 dimx spokes 1 1 1 1 1 1 1 1 dynamics 1 1]
+                        t = trajPics(:,:,:,1,1,echo,fa,1,1,1,1,:,1,1);
+                        % [dimx dimy 1 coils 1 1 1 1 1 1 1 1 1 1]
+                        s = sensitivities(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,1,:,1,1);
+
+                        reco = bart(app,picsCommand,'-t',t,k,s);
+                        imagesOut(:,:,:,1,1,echo,fa,1,1,1,1,:,1,1) =  squeeze(reco);
+
+                    end
+
+                    % Report on progress
+                    app.progressCounter = app.progressCounter + 1;
+                    app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                    drawnow;
+
+                end
             end
 
             % Flip dimensions to correct orientation
-            if obj.PHASE_ORIENTATION == 1
-                imageOut = flip(recoImage,3);
-            else
-                imageOut = flip(flip(recoImage,3),1);
+            imagesOut = flip(imagesOut,3);
+            if obj.PHASE_ORIENTATION == 0
+                imagesOut = flip(imagesOut,1);
             end
 
-            % Fake coil sensitivities
-            for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = ones(size(imageOut));
-                else
-                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = zeros(size(imageOut));
-                end
+            % Interpolate to requested dimensions
+            if ndimX ~= dimT || ndimY ~= dimT || ndimZ ~= dimT || ndimD ~= dimD
+                imagesOut = obj.matrixInterpolate(imagesOut,[ndimX/dimT ndimY/dimT ndimZ/dimT ndimD/dimD 1 1 1],'cubic');
+                ndimX = size(imagesOut,1);
+                ndimY = size(imagesOut,2);
+                ndimZ = size(imagesOut,3);
+                ndimD = size(imagesOut,4);
+                app.XEditField.Value = ndimX;
+                app.YEditField.Value = ndimY;
+                app.ZEditField.Value = ndimZ;
+                app.NREditField.Value = ndimD;
             end
-      
+
             % Return the image objects
-            obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
-            obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
-            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
-            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % Reco3DuteCS
 
@@ -4721,14 +5227,8 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % Image reconstruction: NUFFT 3D UTE with Matlab
         % ---------------------------------------------------------------------------------
-        function obj = Reco3DuteNUFFT(obj, app, flipAngle, echoTime)
-
-            % Original kx(readout), ky(spokes)
-            kSpaceRaw = cell(obj.nrCoils);
-            for i=1:obj.nrCoils
-                kSpaceRaw{i} = obj.rawKspace{i}(:,:,:,1,flipAngle,echoTime);
-            end
-
+        function obj = Reco3DuteNUFFT(obj, app)
+       
             % Gradient delays from app
             dTotal(1) = app.GxDelayEditField.Value;
             dTotal(2) = app.GyDelayEditField.Value;
@@ -4736,59 +5236,142 @@ classdef proudData
             offset = app.DataOffsetRadialEditField.Value;
 
             % Data dimensions
-            [dimx, dimy] = size(kSpaceRaw{1});
+            dimX = size(obj.rawKspace{1},1);    % spoke readout
+            dimS = size(obj.rawKspace{1},2);    % number of spokes
+            dimD = size(obj.rawKspace{1},4);    % dynamics
+            dimF = size(obj.rawKspace{1},5);    % flip-angles
+            dimE = size(obj.rawKspace{1},6);    % echo times
+            dimC = obj.nrCoils;                 % coils
 
+            % Requested dimensions
+            ndimX = app.XEditField.Value;
+            ndimY = app.YEditField.Value;
+            ndimZ = app.ZEditField.Value;
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
+            else
+                app.NREditField.Value = 1;
+            end
+          
             % K-space radial spokes
-            dims = length(obj.gradTrajectory);
-            traj = zeros(3,dims,dimy);
-            for cnt = 1:dimy
-                traj(1,:,cnt) = dims*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
-                traj(2,:,cnt) = dims*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
-                traj(3,:,cnt) = dims*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
+            dimT = length(obj.gradTrajectory);
+            traj = zeros(3,dimT,dimS);
+            for cnt = 1:dimS
+                traj(1,:,cnt) = dimT*(obj.seqTrajectory(1,cnt)/32767)*obj.gradTrajectory(:);
+                traj(2,:,cnt) = dimT*(obj.seqTrajectory(2,cnt)/32767)*obj.gradTrajectory(:);
+                traj(3,:,cnt) = dimT*(obj.seqTrajectory(3,cnt)/32767)*obj.gradTrajectory(:);
             end
 
             % Check if offset is not too large, if so reduce size
             offset(offset < 0) = 0;
-            offset(offset > (dimx - dims)) = dimx - dims;
+            offset(offset > (dimX - dimT)) = dimX - dimT;
             app.DataOffsetRadialEditField.Value = offset;
 
+            % Fill k-space for reconstruction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil};
+            end
+
             % Resize k-space and remove offset
-            for i = 1:obj.nrCoils
-                kSpace{i}(:,:) = kSpaceRaw{i}(1+offset:dims+offset,:);
+            kSpace = kSpace(1+offset:dimT+offset,:,:,:,:,:,:);
+
+            % Initialize progress counter
+            app.RecoProgressGauge.Value = 0;
+            app.totalCounter = 1 + 3*dimD*dimE*dimF;
+            app.progressCounter = 0;
+
+            % Corrections
+            app.TextMessage("Preparing data for reconstruction ....");
+            tukFilter = tukeywin(2*dimT,2*obj.tukeyFilterWidth);
+            tukFilter = tukFilter(dimT+1:2*dimT);
+            interpFactor = 4;
+            centerEchoFlag = app.CenterEchoCheckBox.Value;
+            phaseCorrectionFlag = app.PhaseCorrectCheckBox.Value;
+            amplitudeFlag = app.AmplitudeCorrectionCheckBox.Value;
+            tukeyFlag = app.TukeyFilterCheckBox.Value;
+
+            for echo = 1:dimE
+
+                for fa = 1:dimF
+
+                    for dynamic = 1:dimD
+
+                        meanKspace = 1; % otherwise parfor does not start
+                        if amplitudeFlag
+                            mm1 = abs(kSpace(:,:,1,dynamic,fa,echo,:));
+                            mm2 = max(mm1);
+                            meanKspace = mean(mm2(:));
+                        end
+
+                        for coil = 1:dimC
+
+                            parfor spoke = 1:dimS
+
+                                if centerEchoFlag
+                                    % Auto shift to maximum intensity at first data point
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    tmpKline2 = interp(tmpKline1,interpFactor);
+                                    [~,kCenter] = max(abs(tmpKline2));
+                                    kShift = 1-kCenter/interpFactor;
+                                    discard = ceil(abs(kShift));
+                                    tmpKline1 = fraccircshift(tmpKline1,kShift);
+                                    tmpKline1(end-discard:end) = 0;
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = tmpKline1;
+                                end
+
+                                if phaseCorrectionFlag
+                                    % Phase correction and normalize
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    kCenterPhase = angle(tmpKline1(1));
+                                    tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = tmpKline1;
+                                end
+
+                                if amplitudeFlag
+                                    % Amplitude correction
+                                    tmpKline1 = kSpace(:,spoke,1,dynamic,fa,echo,coil);
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = meanKspace*tmpKline1/max(abs(tmpKline1(:)));
+                                end
+
+                                if tukeyFlag
+                                    % Tukey filter
+                                    kSpace(:,spoke,1,dynamic,fa,echo,coil) = kSpace(:,spoke,1,dynamic,fa,echo,coil).*tukFilter;
+                                end
+
+                            end
+
+                        end
+
+                    end
+
+                end
+
             end
 
-            % Auto shift to maximum intensity at first data point
-            if app.CenterEchoCheckBox.Value
-                interpFactor = 16;
-                for coil = 1:obj.nrCoils
-                    for spoke = 1:dimy
-                        tmpKline1 = kSpace{coil}(:,spoke);
-                        tmpKline2 = interp(tmpKline1,interpFactor);
-                        [~,kCenter] = max(abs(tmpKline2));
-                        kShift = 1-kCenter/interpFactor;
-                        discard = ceil(abs(kShift));
-                        tmpKline1 = fraccircshift(tmpKline1,kShift);
-                        tmpKline1(end-discard:end) = 0;
-                        kSpace{coil}(:,spoke) = tmpKline1;
-                    end
-                end
+            % Corrected k-space
+            for coil = 1:dimC
+                obj.rawKspace{coil} = kSpace(:,:,:,:,:,:,coil);
+            end
+            obj = obj.scaleKspace;
+
+            % Re-estimate global coil sensitivities
+            if (nnz(obj.coilActive_flag) > 1) && (app.AutoSensitivityCheckBox.Value == 1)
+                obj = obj.estimateCoilSensitivies(app);
             end
 
-            % Phase correction
-            if app.PhaseCorrectCheckBox.Value
-                interpFactor = 16;
-                for coil = 1:obj.nrCoils
-                    for spoke = 1:dimy
-                        tmpKline1 = kSpace{coil}(:,spoke);
-                        kCenterPhase = angle(tmpKline1(1));
-                        tmpKline1 = tmpKline1.*exp(-1j.*kCenterPhase);
-                        kSpace{coil}(:,spoke) = tmpKline1;
-                    end
-                end
+            % Apply global coil sensitivity correction
+            for coil = 1:dimC
+                kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
             % Prepare the trajectory with the gradient delay values
             traj = obj.trajInterpolation(traj,dTotal);
+
+            % Report on progress
+            app.progressCounter = app.progressCounter + 1;
+            app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+            drawnow;
 
             % Initialization
             maxit = 5;      % 0 or 1 for gridding, higher values for conjugate gradient
@@ -4796,58 +5379,96 @@ classdef proudData
             weight = [];    % data weighting (optional)
             partial = 0.5;  % Tikhobov penalty on ||imag(x))||
 
-            % Progress gauge
-            loops = obj.nrCoils;
-            app.RecoProgressGauge.Value = 0;
-
-            cnt = 1;
+            % Pre-allocate
+            imagesOut = zeros(dimT,dimT,dimT,dimD,dimF,dimE);
 
             % Reco
-            for coil = 1:obj.nrCoils
+            echo = 0;
+            while (echo < dimE) && ~app.stopReco_flag
+                echo = echo + 1;
 
-                objn = nufft_3d(traj,dims,app);
-                data = kSpace{coil}(:);
-                reco = squeeze(objn.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
-                image(:,:,:,coil) = reco;
+                fa = 0;
+                while (fa < dimF) && ~app.stopReco_flag
+                    fa = fa + 1;
 
-                app.RecoProgressGauge.Value = round(100*cnt/loops);
-                drawnow;
+                    dynamic = 0;
+                    while (dynamic < ndimD) && ~app.stopReco_flag
+                        dynamic = dynamic + 1;
 
-                cnt = cnt + 1;
+                        objNufft = nufft_3d(traj,dimT,app);
 
-            end
+                        % Report on progress
+                        app.progressCounter = app.progressCounter + 1;
+                        app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                        drawnow;
 
-            % Root sum of squares coil dimension
-            %imageOut = rssq(image,4);
-            imageOut = sum(image,4);
+                        data = kSpace(:,:,1,dynamic,fa,echo,logical(obj.coilActive_flag));
+                        data = reshape(data,dimT*dimS,nnz(obj.coilActive_flag));
 
-            % Flip dimensions to correct orientation
-            if obj.PHASE_ORIENTATION == 1
-                imageOut = flip(imageOut,3);
-            else
-                imageOut = flip(flip(imageOut,3),1);
-            end
+                        image3D = squeeze(objNufft.iNUFT(data,maxit,damp,weight,'phase-constraint',partial,app));
 
-            % Fake coil sensitivities
-            for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = ones(size(imageOut));
-                else
-                    obj.sensitivityMaps{coil}(:,:,:,1,flipAngle,echoTime) = zeros(size(imageOut));
+                        % Report on progress
+                        app.progressCounter = app.progressCounter + 1;
+                        app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                        drawnow;
+
+                        % Coil combine
+                        if dimC>1
+                            imageTmp(:,:,:,1,:) = image3D;
+                            try
+                                reco = coilCombine_mex(imageTmp);
+                            catch
+                                reco = coilCombine(imagesTmp);
+                            end
+                        else
+                            reco = image3D;
+                        end
+
+                        % Report on progress
+                        app.progressCounter = app.progressCounter + 1;
+                        app.RecoProgressGauge.Value = round(100*app.progressCounter/app.totalCounter);
+                        drawnow;
+
+                        % Image out
+                        imagesOut(:,:,:,dynamic,fa,echo) = image3D;
+
+                    end
                 end
             end
-      
-            % Return the image objects
-            obj.complexImages(:,:,:,1,flipAngle,echoTime) = imageOut;
-            obj.images(:,:,:,1,flipAngle,echoTime) = abs(imageOut);
-            obj.phaseImages(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
-            obj.phaseImagesOrig(:,:,:,1,flipAngle,echoTime) = angle(imageOut);
 
-            % At this moment the datasize will be that of the original data
-            app.XEditField.Value = size(obj.images,1);
-            app.YEditField.Value = size(obj.images,2);
-            app.ZEditField.Value = size(obj.images,3);
-            app.NREditField.Value = 1;
+            % Flip dimensions to correct orientation
+            imagesOut = flip(imagesOut,3);
+            if obj.PHASE_ORIENTATION == 0
+                imagesOut = flip(imagesOut,1);
+            end
+
+            % Interpolate to requested dimensions
+            if ndimX ~= dimT || ndimY ~= dimT || ndimZ ~= dimT || ndimD ~= dimD
+                imagesOut = obj.matrixInterpolate(imagesOut,[ndimX/dimT ndimY/dimT ndimZ/dimT ndimD/dimD 1 1 1],'cubic');
+                ndimX = size(imagesOut,1);
+                ndimY = size(imagesOut,2);
+                ndimZ = size(imagesOut,3);
+                ndimD = size(imagesOut,4);
+                app.XEditField.Value = ndimX;
+                app.YEditField.Value = ndimY;
+                app.ZEditField.Value = ndimZ;
+                app.NREditField.Value = ndimD;
+            end
+
+            % Make coil sensitivities
+            for coil = 1:obj.maxCoils
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
+                    obj.sensitivityMaps{coil} = ones(dimT,dimT,dimT,dimD,dimF,dimE)*obj.coilSensitivities(coil);
+                else
+                    obj.sensitivityMaps{coil} = zeros(dimT,dimT,dimT,ndimZ,dimD,dimF,dimE);
+                end
+            end
+
+            % Return the image objects
+            obj.complexImages = imagesOut;
+            obj.images = abs(imagesOut);
+            obj.phaseImages = angle(imagesOut);
+            obj.phaseImagesOrig = angle(imagesOut);
 
         end % Reco3DuteNUFFT
 
@@ -4885,7 +5506,7 @@ classdef proudData
                         window(2) = round(size(im,2)/2);
                     end
 
-                    % Loop over all slices, dynamics, flip angles, echo times
+                    % Loop over all slices, dynamics, flip-angles, echo-times
                     % Choose 2-dim image + extra dimension
                     if nTE > 1
 
@@ -5331,8 +5952,8 @@ classdef proudData
                 "TE = ", num2str(app.TEViewField.Value), " ms \n", ...
                 "#echoes = ", num2str(app.NEViewField.Value), "\n", ...
                 "#averages = ", num2str(app.NAViewField.Value), "\n", ...
-                "#flip angles = ", num2str(app.NFAViewField.Value), "\n", ...
-                "flip angle(s) = ", app.FAViewField.Value, "\n", ...
+                "#flip-angles = ", num2str(app.NFAViewField.Value), "\n", ...
+                "flip-angle(s) = ", app.FAViewField.Value, "\n", ...
                 "#repetitions = ", num2str(app.NREditField.Value), "\n", ...
                 "trajectory = ", app.TrajectoryViewField.Value, "\n\n", ...
                 "\nRECONSTRUCTION PARAMETERS\n\n", ...
@@ -6064,7 +6685,7 @@ classdef proudData
 
             dydtx = dydkx.*repmat(dkx,[1 1 1 nCoils]);
             dydty = dydky.*repmat(dky,[1 1 1 nCoils]);
-            dydtz = -dydkz.*repmat(dkz,[1 1 1 nCoils]); % positive does not converge
+            dydtz = dydkz.*repmat(dkz,[1 1 1 nCoils]); % positive does not converge
 
             dydtx(isnan(dydtx)) = 0;
             dydty(isnan(dydty)) = 0;
@@ -6465,24 +7086,27 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % 2D radial 0 - 180 trajectory
         % ---------------------------------------------------------------------------------
-        function traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dims)
+        function traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dimf, dime)
 
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
 
             fullAngle = 180;
-            for c = 1:dims
-                for d = 1:dimd
-                    for z = 1:dimz
-                        for j = 1:dimy
-                            % crds, x, y(spoke), slice, repetitions, coils
-                            traj(1,:,j,z,d,c) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(j-1)*fullAngle/dimy);
-                            traj(2,:,j,z,d,c) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(j-1)*fullAngle/dimy);
-                            traj(3,:,j,z,d,c) = 0;
+            for echo = 1:dime
+                for fa = 1:dimf
+                    for dynamic = 1:dimd
+                        for slice = 1:dimz
+                            for y = 1:dimy
+                                % crds, x, y(spoke), slice, repetitions, flip-anlge, echo-times
+                                traj(1,:,y,slice,dynamic,fa,echo) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(y-1)*fullAngle/dimy);
+                                traj(2,:,y,slice,dynamic,fa,echo) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(y-1)*fullAngle/dimy);
+                                traj(3,:,y,slice,dynamic,fa,echo) = 0;
+                            end
                         end
                     end
                 end
             end
+
 
         end % twoDradialTrajectory
 
@@ -6511,6 +7135,55 @@ classdef proudData
         end % image2Dshift
 
 
+
+        % ---------------------------------------------------------------------------------
+        % Resize an n-dimensional matrix
+        % ---------------------------------------------------------------------------------
+        function outputMatrix = matrixInterpolate(inputMatrix, scaling, varargin)
+
+            % inputMatrx = n-dimensional matrix
+            % scaling = scaling factor
+            % varargin = 'linear', 'cubic' interpolation method
+
+            N = ndims(inputMatrix);
+            scaling = scaling(1:N);
+            scaling(1,1:N) = scaling(:).';
+            sz = size(inputMatrix);
+            xvec = cell(1,N);
+            yvec = cell(1,N);
+            szy = nan(1,N);
+            nonsing = true(1,N);
+
+            for i = 1:N
+
+                n = sz(i);
+
+                if n==1 %for vector input
+                    nonsing(i) = 0;
+                    szy(i) = 1;
+                    continue
+                end
+
+                szy(i) = round(sz(i)*scaling(i));
+                m = szy(i);
+
+                xax = linspace(1/n/2, 1-1/n/2 ,n);
+                xax = xax-.5;
+
+                yax = linspace(1/m/2, 1-1/m/2 ,m);
+                yax = yax-.5;
+
+                xvec{i} = xax;
+                yvec{i} = yax;
+
+            end
+
+            xvec = xvec(nonsing);
+            yvec = yvec(nonsing);
+            F = griddedInterpolant(xvec,squeeze(inputMatrix),varargin{:});
+            outputMatrix = reshape(F(yvec),szy);
+
+        end % matrixInterpolate
 
 
     end % Static methods

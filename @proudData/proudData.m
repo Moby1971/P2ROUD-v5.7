@@ -2627,16 +2627,15 @@ classdef proudData
 
             obj.coilSensitivities = round(relativeCoilSensitivity,3);
 
-            app.S1EditField.Value = app.pd.coilSensitivities(1);
-            app.S2EditField.Value = app.pd.coilSensitivities(2);
-            app.S3EditField.Value = app.pd.coilSensitivities(3);
-            app.S4EditField.Value = app.pd.coilSensitivities(4);
-            app.S5EditField.Value = app.pd.coilSensitivities(5);
-            app.S6EditField.Value = app.pd.coilSensitivities(6);
-            app.S7EditField.Value = app.pd.coilSensitivities(7);
-            app.S8EditField.Value = app.pd.coilSensitivities(8);
-            drawnow;
-
+            app.S1EditField.Value = obj.coilSensitivities(1);
+            app.S2EditField.Value = obj.coilSensitivities(2);
+            app.S3EditField.Value = obj.coilSensitivities(3);
+            app.S4EditField.Value = obj.coilSensitivities(4);
+            app.S5EditField.Value = obj.coilSensitivities(5);
+            app.S6EditField.Value = obj.coilSensitivities(6);
+            app.S7EditField.Value = obj.coilSensitivities(7);
+            app.S8EditField.Value = obj.coilSensitivities(8);
+      
         end % estimateCoilSensitivies
 
 

@@ -882,9 +882,9 @@ classdef proudData
             % Read information from the header and footer first
             fid = fopen(mrdfile,'r');
             val = fread(fid,4,'int32');
-            xdim = val(1);
-            ydim = val(2);
-            zdim = val(3);
+            dimX = val(1);
+            dimY = val(2);
+            dimZ = val(3);
             dim4 = val(4);
             fseek(fid,18,'bof');
             datatype=fread(fid,1, 'uint16');
@@ -893,9 +893,9 @@ classdef proudData
             val = fread(fid,2, 'int32');
             dim5 = val(1);
             dim6 = val(2);
-            no_samples = xdim;
-            no_views = ydim;
-            no_views_2 = zdim;
+            no_samples = dimX;
+            no_views = dimY;
+            no_views_2 = dimZ;
             no_slices = dim4;
             no_echoes = dim5;
             no_expts = dim6;
@@ -949,7 +949,7 @@ classdef proudData
 
             % Makes a new MRD file footer by replacing old values with new ones
 
-            inputfooter = obj.mrdFooter;
+            inputFooter = obj.mrdFooter;
 
             % Search parameters
             parameters = {':NO_SAMPLES no_samples, ',':NO_VIEWS no_views, ',':NO_VIEWS_2 no_views_2, ', ...
@@ -980,25 +980,25 @@ classdef proudData
                 var = replacepars{i};
 
                 % Find the position of the parameter
-                pos = strfind(inputfooter,txt);
+                pos = strfind(inputFooter,txt);
 
                 if ~isempty(pos)
 
                     try
 
                         % Determine which part should be replaced
-                        oldtxtlength = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),newline)-1;
+                        oldTxtLength = strfind(inputFooter(pos+length(txt):pos+length(txt)+12),newline)-1;
 
                         if contains(txt,'SLICE_THICKNESS')
                             % Slice thickness is a special case
-                            commapos = [];
-                            commapos = strfind(inputfooter(pos+length(txt):pos+length(txt)+12),',');
-                            newtext = strcat(num2str(var));
-                            inputfooter = replaceBetween(inputfooter,pos+length(txt)+commapos(1),pos+length(txt)+oldtxtlength-1,newtext);
+                            commaPos = [];
+                            commaPos = strfind(inputFooter(pos+length(txt):pos+length(txt)+12),',');
+                            newText = strcat(num2str(var));
+                            inputFooter = replaceBetween(inputFooter,pos+length(txt)+commaPos(1),pos+length(txt)+oldTxtLength-1,newText);
                         else
                             % Replace the values with the new ones
-                            newtext = strcat(num2str(var));
-                            inputfooter = replaceBetween(inputfooter,pos+length(txt),pos+length(txt)+oldtxtlength-1,newtext);
+                            newText = strcat(num2str(var));
+                            inputFooter = replaceBetween(inputFooter,pos+length(txt),pos+length(txt)+oldTxtLength-1,newText);
                         end
 
                     catch
@@ -1009,7 +1009,7 @@ classdef proudData
             end
 
             % Return the new MRD footer object
-            obj.newMrdFooter  = inputfooter;
+            obj.newMrdFooter  = inputFooter;
 
 
         end % makeMrdFooter
@@ -1206,7 +1206,7 @@ classdef proudData
             % The RPR file will be used by the MR Solutions software to make a reconstruction
             % and import the data into preclinical
 
-            inputrpr = obj.rprFile;
+            inputRpr = obj.rprFile;
 
             % Parameter names
             parameters = {
@@ -1246,31 +1246,31 @@ classdef proudData
                 var = replacePars{i};
 
                 % Find the position of the parameter name
-                pos = strfind(inputrpr,txt);
+                pos = strfind(inputRpr,txt);
 
                 if ~isempty(pos)
 
                     if ~isstring(var)
 
                         % Numeric values
-                        oldTxtLength = strfind(inputrpr(pos+length(txt):pos+length(txt)+20),char(13))-1;
+                        oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+20),char(13))-1;
                         if isempty(oldTxtLength)
                             oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+20),newline)-1;
                         end
-                        newtext = [num2str(var),'     '];
-                        newtext = newtext(1:6);
-                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newtext);
+                        newText = [num2str(var),'     '];
+                        newText = newText(1:6);
+                        inputRpr = replaceBetween(inputRpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newText);
 
                     else
 
                         % String-based values
-                        oldTxtLength = strfind(inputrpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
+                        oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+15),char(13))-1;
                         if isempty(oldTxtLength)
                             oldTxtLength = strfind(inputRpr(pos+length(txt):pos+length(txt)+20),newline)-1;
                         end
-                        newtext = strcat(" ",var,"           ");
-                        newtext = extractBefore(newtext,12);
-                        inputrpr = replaceBetween(inputrpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newtext);
+                        newText = strcat(" ",var,"           ");
+                        newText = extractBefore(newText,12);
+                        inputRpr = replaceBetween(inputRpr,pos+length(txt),pos+length(txt)+oldTxtLength-1,newText);
 
                     end
 
@@ -1279,7 +1279,7 @@ classdef proudData
             end
 
             % Return the new RPR file object
-            obj.newRprFile = inputrpr;
+            obj.newRprFile = inputRpr;
 
         end % makeRprFile
 
@@ -1504,12 +1504,14 @@ classdef proudData
             % data = X, Y, Z, dynamics, flip-angles, echo-times, slabs
             %
             % -----------------------------------------------------------------------------
+            
+            dimC = obj.nrCoils;
 
             switch obj.dataType
 
                 case "3D"
 
-                    for coil = 1:obj.nrCoils
+                    for coil = 1:dimC 
 
                         switch ndims(obj.rawKspace{coil})
 
@@ -1530,7 +1532,7 @@ classdef proudData
                     end
 
                     % Permute data to (X, Y, Z, NR, NFA, NE, SLAB)    ---- NOT FULLY TESTED -----
-                    for coil = 1:obj.nrCoils
+                    for coil = 1:dimC 
 
                         if ndims(obj.rawKspace{coil})==4 && obj.multiFlipAngles_flag
                             obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1,2,3,5,4,6,7]);
@@ -1557,7 +1559,7 @@ classdef proudData
                     if contains(obj.PPL,'flash') && ~(obj.retroRecoScan_flag == true || obj.proudRecoScan_flag == true)
                         if obj.NO_ECHOES > 1
                             for echo = 2:2:obj.NO_ECHOES
-                                for coil = 1:obj.nrCoils
+                                for coil = 1:dimC 
                                     obj.rawKspace{coil}(:,:,:,:,:,echo,:) = flip(obj.rawKspace{coil}(:,:,:,:,:,echo,:),1);
                                 end
                             end
@@ -1567,7 +1569,7 @@ classdef proudData
 
                 case "3Dute"
 
-                    for coil = 1:obj.nrCoils
+                    for coil = 1:dimC 
                         obj.rawKspace{coil} = permute(obj.rawKspace{coil},[2,1]);
                     end
 
@@ -1689,7 +1691,9 @@ classdef proudData
 
             app.TextMessage('Sorting k-space ...');
 
-            for coil = 1:obj.nrCoils
+            dimC = obj.nrCoils;
+
+            for coil = 1:dimC 
 
                 app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
 
@@ -1703,23 +1707,23 @@ classdef proudData
                 end
 
                 % Dimensions
-                [dimx,dimy,dimz,nrrep,nrfa,nrte] = size(kSpaceRaw);
+                [dimX, dimY, dimZ, dimD, dimF, dimE] = size(kSpaceRaw);
                 kSpace = zeros(size(kSpaceRaw));
-                trajectory2D = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
+                trajectory2D = ones(dimX*dimY*dimZ*dimD*dimF*dimE,7);
 
                 % Counter
                 tcnt = 1;
 
                 % Loop over all dimensions
-                for teCounter=1:nrte
+                for echo = 1:dimE
 
-                    for faCounter=1:nrfa
+                    for fa = 1:dimF
 
-                        for repCounter=1:nrrep
+                        for dynamic = 1:dimD
 
-                            app.TextMessage(strcat('Sorting dynamic',{' '},num2str(nrrep),' ...'));
+                            app.TextMessage(strcat('Sorting dynamic',{' '},num2str(dimD),' ...'));
 
-                            for z=1:dimz
+                            for slice = 1:dimZ
 
                                 % Determine shift of echoes based on navigator echoes
                                 if firsty>0
@@ -1727,28 +1731,28 @@ classdef proudData
                                     % Calculate phase difference between even and odd echoes
                                     PHshift = zeros(firsty,1);
                                     for nav=1:firsty
-                                        navecho1 = squeeze(kSpaceRaw(round(dimx/2)+1, 1 ,z,repCounter,faCounter,teCounter));
-                                        navecho2 = squeeze(kSpaceRaw(round(dimx/2)+1,nav,z,repCounter,faCounter,teCounter));
+                                        navecho1 = squeeze(kSpaceRaw(round(dimX/2)+1, 1 ,slice,dynamic,fa,echo));
+                                        navecho2 = squeeze(kSpaceRaw(round(dimX/2)+1,nav,slice,dynamic,fa,echo));
                                         PHshift(nav) = angle(navecho2) - angle(navecho1);
                                     end
 
                                     % Sorting including phase correction based on navigator
-                                    for j = firsty+1:dimy
+                                    for j = firsty+1:dimY
 
                                         idx = mod(j-firsty+1,firsty)+1;
                                         y = kTable(j)+round(firsty/2);
 
-                                        kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);%.*exp(-1i*PHshift(idx));
+                                        kSpace(:,y,slice,dynamic,fa,echo) = kSpaceRaw(:,j,slice,dynamic,fa,echo);%.*exp(-1i*PHshift(idx));
 
-                                        for x = 1:dimx
+                                        for x = 1:dimX
 
                                             % Fill the k-space trajectory array
                                             trajectory2D(tcnt,1) = x;
                                             trajectory2D(tcnt,2) = y;
-                                            trajectory2D(tcnt,3) = z;
-                                            trajectory2D(tcnt,4) = repCounter;
-                                            trajectory2D(tcnt,5) = faCounter;
-                                            trajectory2D(tcnt,6) = teCounter;
+                                            trajectory2D(tcnt,3) = slice;
+                                            trajectory2D(tcnt,4) = dynamic;
+                                            trajectory2D(tcnt,5) = fa;
+                                            trajectory2D(tcnt,6) = echo;
                                             tcnt = tcnt + 1;
 
                                         end
@@ -1758,19 +1762,19 @@ classdef proudData
                                 else
 
                                     % Sorting without phase correction
-                                    for j = firsty+1:dimy
+                                    for j = firsty+1:dimY
                                         y = kTable(j)+round(firsty/2);
-                                        kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);
+                                        kSpace(:,y,slice,dynamic,fa,echo) = kSpaceRaw(:,j,slice,dynamic,fa,echo);
 
-                                        for x = 1:dimx
+                                        for x = 1:dimX
 
                                             % Fill the k-space trajectory array
                                             trajectory2D(tcnt,1) = x;
                                             trajectory2D(tcnt,2) = y;
-                                            trajectory2D(tcnt,3) = z;
-                                            trajectory2D(tcnt,4) = repCounter;
-                                            trajectory2D(tcnt,5) = faCounter;
-                                            trajectory2D(tcnt,6) = teCounter;
+                                            trajectory2D(tcnt,3) = slice;
+                                            trajectory2D(tcnt,4) = dynamic;
+                                            trajectory2D(tcnt,5) = fa;
+                                            trajectory2D(tcnt,6) = echo;
                                             tcnt = tcnt + 1;
 
                                         end
@@ -1807,7 +1811,9 @@ classdef proudData
 
             app.TextMessage('Sorting k-space ...');
 
-            for coil = 1:obj.nrCoils
+            dimC = obj.nrCoils;
+
+            for coil = 1:dimC
 
                 app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
 
@@ -1815,9 +1821,9 @@ classdef proudData
                 kSpaceRaw = obj.rawKspace{coil};
 
                 % Dimensions
-                [dimx,dimy,dimz,nrrep,nrfa,nrte] = size(kSpaceRaw);
+                [dimX, dimY, dimZ, dimD, dimF, dimE] = size(kSpaceRaw);
                 kSpace = zeros(size(kSpaceRaw));
-                trajectory = ones(dimx*dimy*dimz*nrrep*nrfa*nrte,7);
+                trajectory = ones(dimX*dimY*dimZ*dimD*dimF*dimE,7);
 
                 % Navigator yes or no, for RARE echo train correction
                 firsty = 0;
@@ -1829,31 +1835,31 @@ classdef proudData
                 tcnt = 1;
 
                 % Loop over all dimensions
-                for teCounter=1:nrte
+                for echo = 1:dimE
 
-                    for faCounter=1:nrfa
+                    for fa = 1:dimF
 
-                        for repCounter=1:nrrep
+                        for dynamic = 1:dimD
 
-                            app.TextMessage(strcat('Sorting dynamic',{' '},num2str(nrrep),' ...'));
+                            app.TextMessage(strcat('Sorting dynamic',{' '},num2str(dimD),' ...'));
 
-                            for z=1:dimz
+                            for z = 1:dimZ
 
-                                for j = firsty+1:dimy
+                                for j = firsty+1:dimY
 
                                     y = kTable(j)+round(firsty/2);
 
-                                    kSpace(:,y,z,repCounter,faCounter,teCounter) = kSpaceRaw(:,j,z,repCounter,faCounter,teCounter);
+                                    kSpace(:,y,z,dynamic,fa,echo) = kSpaceRaw(:,j,z,dynamic,fa,echo);
 
-                                    for x = 1:dimx
+                                    for x = 1:dimX
 
                                         % Fill the k-space trajectory array
                                         trajectory(tcnt,1) = x;
                                         trajectory(tcnt,2) = y;
                                         trajectory(tcnt,3) = z;
-                                        trajectory(tcnt,4) = repCounter;
-                                        trajectory(tcnt,5) = faCounter;
-                                        trajectory(tcnt,6) = teCounter;
+                                        trajectory(tcnt,4) = dynamic;
+                                        trajectory(tcnt,5) = fa;
+                                        trajectory(tcnt,6) = echo;
                                         tcnt = tcnt + 1;
 
                                     end
@@ -1899,26 +1905,26 @@ classdef proudData
 
             if crit1 && crit2
 
-                [dimx, dimy, dimz, nrd, nfa, ne] = size(obj.rawKspace{1});
+                [dimX, dimY, dimZ, dimD, dimF, dimE] = size(obj.rawKspace{1});
 
                 nrLines = obj.lines_per_segment;
-                nrc = obj.nrCoils;
+                dimC = obj.nrCoils;
 
-                for coil = 1:nrc
+                for coil = 1:dimC
 
-                    for slices = 1:dimz
+                    for slice = 1:dimZ
 
-                        for flipAngle = 1:nfa
+                        for fa = 1:dimF
 
-                            for dynamic = 1:nrd
+                            for dynamic = 1:dimD
 
-                                ks = squeeze(obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:));
+                                ks = squeeze(obj.rawKspace{coil}(:,:,slice,dynamic,fa,:));
                                 ks = permute(ks,[3 2 1]);
-                                ks = reshape(ks(:),[nrLines ne dimy/nrLines dimx]);
+                                ks = reshape(ks(:),[nrLines dimE dimY/nrLines dimX]);
                                 ks = permute(ks,[2 1 3 4]);
-                                ks = reshape(ks(:),[ne dimx dimy]);
+                                ks = reshape(ks(:),[dimE dimX dimY]);
                                 ks = permute(ks,[3 2 1]);
-                                obj.rawKspace{coil}(:,:,slices,dynamic,flipAngle,:) = ks(:,:,:);
+                                obj.rawKspace{coil}(:,:,slice,dynamic,fa,:) = ks(:,:,:);
 
                             end
 
@@ -1948,61 +1954,62 @@ classdef proudData
             obj.fillingSpace = [];
 
             % Size of the image matrix
-            dimx = obj.NO_SAMPLES_ORIG;
-            dimy = obj.NO_VIEWS;
-            nrSlices = obj.NO_SLICES;
-            nrRep = obj.EXPERIMENT_ARRAY;
-            arrayLength = obj.NO_VIEWS_ORIG;
-            frames = app.NREditField.Value;
+            dimX = obj.NO_SAMPLES_ORIG;
+            dimY = obj.NO_VIEWS;
+            dimZ = obj.NO_SLICES;
+            dimN = obj.EXPERIMENT_ARRAY;
+            dimYO = obj.NO_VIEWS_ORIG;
+            dimD = app.NREditField.Value;
+            dimC = obj.nrCoils;
 
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimC
 
-                app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
+                app.TextMessage(strcat("Sorting coil ",num2str(coil)," ..."));
 
                 % Unsorted k-space for each coil
                 ukspace = obj.unsKspace{coil};
 
                 % Pre-allocate large matrices
-                aframes = frames;
+                aframes = dimD;
                 aframes(aframes==1) = 2; % allocate at least 2 frames, because preallocating 1 does not work
-                kSpace = zeros(dimx, dimy, nrSlices, aframes);
-                avgSpace = zeros(dimx, dimy, nrSlices, aframes);
-                trajectoryGpVarMul = ones(dimx * arrayLength * nrSlices * nrRep, 7);
+                kSpace = zeros(dimX, dimY, dimZ, aframes);
+                avgSpace = zeros(dimX, dimY, dimZ, aframes);
+                trajectoryGpVarMul = ones(dimX * dimYO * dimZ * dimN, 7);
 
                 % Fill the ky-space locations
-                ky = zeros(arrayLength, 1);
-                i = 1:arrayLength;
-                ky(i) = int16(obj.gp_var_mul(i)) + round(dimy/2) + 1;     % contains the y-coordinates of the custom k-space sequentially
+                ky = zeros(dimYO, 1);
+                i = 1:dimYO;
+                ky(i) = int16(obj.gp_var_mul(i)) + round(dimY/2) + 1;     % contains the y-coordinates of the custom k-space sequentially
 
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nrRep * nrSlices);
+                ky = repmat(ky,1,dimN * dimZ);
 
                 % Number of k-space points per frame
-                kPointsPerFrame = round(obj.NO_VIEWS_ORIG * nrRep / frames);
+                kPointsPerFrame = round(dimYO * dimN / dimD);
 
                 % Trajectory counter
                 cnt = 0;
 
                 % Loop over slices
-                for slice = 1:nrSlices
+                for slice = 1:dimZ
 
                     % Loop over desired number of frames
-                    for dynamic = 1:frames
+                    for dynamic = 1:dimD
 
-                        app.TextMessage(strcat('Sorting dynamic',{' '},num2str(dynamic),' ...'));
+                        app.TextMessage(strcat("Sorting dynamic ",num2str(dynamic)," ..."));
 
                         % Code below not correct for slices !!!!
                         wStart = (dynamic - 1) * kPointsPerFrame + 1; % starting k-line for specific frame
                         wEnd = dynamic * kPointsPerFrame;             % ending k-line for specific frame
-                        if wEnd > arrayLength * nrRep
-                            wEnd = arrayLength * nrRep;
+                        if wEnd > dimYO * dimN
+                            wEnd = dimYO * dimN;
                         end
 
                         for w = wStart:wEnd
 
-                            for x = 1:dimx
+                            for x = 1:dimX
 
-                                kSpace(x,ky(w),slice,dynamic) = kSpace(x,ky(w),slice,dynamic) + ukspace((w - 1) * dimx + x);
+                                kSpace(x,ky(w),slice,dynamic) = kSpace(x,ky(w),slice,dynamic) + ukspace((w - 1) * dimX + x);
                                 avgSpace(x,ky(w),slice,dynamic) = avgSpace(x,ky(w),slice,dynamic) + 1;
 
                                 % Fill the k-space trajectory array for viewing purposes
@@ -2023,18 +2030,18 @@ classdef proudData
                 % Normalize by dividing through number of averages
                 kSpace = kSpace./avgSpace;
                 kSpace(isnan(kSpace)) = complex(0);
-                kSpace = kSpace(:,:,:,1:frames);
+                kSpace = kSpace(:,:,:,1:dimD);
 
                 % Return the object
-                obj.rawKspace{coil} = kSpace(:,:,:,1:frames);
+                obj.rawKspace{coil} = kSpace(:,:,:,1:dimD);
 
             end
 
             % For k-space filling visualization
-            obj.nsaSpace = avgSpace(:,:,:,1:frames);
+            obj.nsaSpace = avgSpace(:,:,:,1:dimD);
             fillingKSpace = avgSpace./avgSpace;
             fillingKSpace(isnan(fillingKSpace)) = 0;
-            obj.fillingSpace = fillingKSpace(:,:,:,1:frames);
+            obj.fillingSpace = fillingKSpace(:,:,:,1:dimD);
 
             % Trajectory
             obj.seqTrajectory = trajectoryGpVarMul;
@@ -2056,47 +2063,47 @@ classdef proudData
             obj.fillingSpace = [];
 
             % Size of the image matrix (X, Y, Z, NR, NFA, NE)
-            dimx = obj.NO_SAMPLES_ORIG;
-            dimy = obj.NO_VIEWS;
-            dimyOrig = obj.NO_VIEWS_ORIG;
-            dimz = obj.NO_VIEWS_2;
-            nRep = obj.EXPERIMENT_ARRAY;                % Number of acquired repetitions/dynamics
-            nDyn = app.NREditField.Value;               % Number of reconstructed dynamics
-            nFA = app.NFAViewField.Value;               % Number of flip-angles
-            arrayLength = obj.NO_VIEWS_ORIG*dimz;
+            dimX = obj.NO_SAMPLES_ORIG;
+            dimY = obj.NO_VIEWS;
+            dimYO = obj.NO_VIEWS_ORIG;
+            dimZ = obj.NO_VIEWS_2;
+            dimN = obj.EXPERIMENT_ARRAY;                % Number of acquired repetitions/dynamics
+            dimD = app.NREditField.Value;               % Number of reconstructed dynamics
+            dimF = app.NFAViewField.Value;               % Number of flip-angles
+            arrayLength = obj.NO_VIEWS_ORIG*dimZ;
 
             % For multiple flip-angles
-            if nFA > 1
-                nRep = nFA;
-                nDyn = nFA;
+            if dimF > 1
+                dimN = dimF;
+                dimD = dimF;
                 app.NREditField.Value = 1;
             end
 
             for coil = 1:obj.nrCoils
 
-                app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
+                app.TextMessage(strcat("Sorting coil ",num2str(coil)," ..."));
 
                 % Unsorted k-space for each coil
                 unsortedKspace = obj.unsKspace{coil};
-                unsortedKspace = reshape(unsortedKspace,dimx,dimy,dimz,nTE,nRep);
+                unsortedKspace = reshape(unsortedKspace,dimX,dimY,dimZ,nTE,dimN);
                 unsortedKspace = permute(unsortedKspace,[1,4,2,3,5]);
                 unsortedKspace = unsortedKspace(:);
 
                 % Preallocate memory for the matrices
-                kSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
-                avgSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
-                trajectory3D = ones(mtx*nRep,7);
+                kSpace = zeros(dimX, dimY, dimZ, dimD, 1, nTE);
+                avgSpace = zeros(dimX, dimY, dimZ, dimD, 1, nTE);
+                trajectory3D = ones(mtx*dimN,7);
 
                 % Centric or linear k-space ordering for views2
-                kzp = zeros(dimz,1);
+                kzp = zeros(dimZ,1);
                 if parameters.pe2_centric_on == 1
                     kzp(1) = 0;
-                    for i = 1:dimz-1
+                    for i = 1:dimZ-1
                         kzp(i+1) = (-1)^i * round(i/2);
                     end
                     kzp = kzp - min(kzp) + 1;
                 else
-                    kzp = 1:dimz;
+                    kzp = 1:dimZ;
                 end
 
                 % Fill the ky-space locations
@@ -2105,79 +2112,75 @@ classdef proudData
                 ky = zeros(arrayLength,1);
                 kz = zeros(arrayLength,1);
                 for i = 1:arrayLength
-                    ky(i) = round(int16(parameters.gp_var_mul(cnt1)) + dimy/2 + 1);
+                    ky(i) = round(int16(parameters.gp_var_mul(cnt1)) + dimY/2 + 1);
                     kz(i) = kzp(kcnt);
                     kcnt = kcnt + 1;
-                    if kcnt > dimz
+                    if kcnt > dimZ
                         kcnt = 1;
                         cnt1 = cnt1 + 1;
-                        cnt1(cnt1 > dimyOrig) = 1;
+                        cnt1(cnt1 > dimYO) = 1;
                     end
                 end
 
                 % Some checks to keep k-space points within dimensions
-                ky(ky>dimy) = dimy;
+                ky(ky>dimY) = dimY;
                 ky(ky<1) = 1;
-                kz(kz>dimz) = dimz;
+                kz(kz>dimZ) = dimZ;
                 kz(kz<1) = 1;
 
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep+1);
-                kz = repmat(kz,1,nRep+1);
+                ky = repmat(ky,1,dimN+1);
+                kz = repmat(kz,1,dimN+1);
                 ky = ky(:);
                 kz = kz(:);
 
                 % Number of k-space points per frame
-                kPointsPerFrame = round(dimyOrig * dimz * nRep / nDyn);
-                app.TextMessage(strcat('k-lines per dynamic =',{' '},num2str(kPointsPerFrame),' ...'));
+                kPointsPerFrame = round(dimYO * dimZ * dimN / dimD);
+                app.TextMessage(strcat("K-lines per dynamic = ",num2str(kPointsPerFrame)," ..."));
 
                 % Trajectory counter
                 kcnt = 1;
 
                 % Loop over desired number of frames
-                for dynamic = 1:nDyn
+                for dynamic = 1:dimD
 
-                    if nFA>1
-                        app.TextMessage(strcat('Sorting flip-angle #',num2str(dynamic),' ...'));
+                    if dimF>1
+                        app.TextMessage(strcat("Sorting flip-angle #",num2str(dynamic)," ..."));
                     else
-                        app.TextMessage(strcat('Sorting dynamic #',num2str(dynamic),' ...'));
+                        app.TextMessage(strcat("Sorting dynamic #",num2str(dynamic)," ..."));
                     end
 
                     wStart = (dynamic - 1) * kPointsPerFrame + 1; % starting k-line for specific frame
                     wEnd = dynamic * kPointsPerFrame;             % ending k-line for specific frame
-                    wEnd(wEnd > arrayLength*nRep) = arrayLength * nRep;
+                    wEnd(wEnd > arrayLength*dimN) = arrayLength * dimN;
 
                     % Loop over y-dimension (views)
                     for pcnt = wStart:wEnd
 
-                        % Loop over x-dimension (readout)
-                        for x = 1:dimx
+                        % X-dimension (readout)
+                        kx = 1:dimX;
 
-                            % Loop over gradient-echoes
-                            for echo = 1:nTE
+                        % Loop over gradient-echoes
+                        for echo = 1:dimE
 
-                                % Fill the k-space and signal averages matrix
-                                if mod(echo,2)
-                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + kx);
-                                else
-                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + (dimx-kx+1)); % reverse even echoes
-                                end
+                            % Odd or even gradient echo
+                            isOdd = mod(echo,2);
+                            readout = (pcnt-1)*dimE*dimX + (echo-1)*dimX + kx*isOdd + (dimX+1-kx)*(1-isOdd);
 
-                                % Fill averages space
-                                avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
+                            % Fill the k-space points
+                            kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace(readout);
 
-                            end
-
-                            % Fill the k-space trajectory array
-                            trajectory3D(kcnt,1) = x;
-                            trajectory3D(kcnt,2) = ky(pcnt);
-                            trajectory3D(kcnt,3) = kz(pcnt);
-                            trajectory3D(kcnt,4) = dynamic;
-                            trajectory3D(kcnt,4) = dynamic;
-                            trajectory3D(kcnt,5) = dynamic;
-                            kcnt = kcnt + 1;
+                            % Fill averages space
+                            avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
 
                         end
+
+                        % Fill the k-space trajectory array
+                        trajectoryProud(kcnt:kcnt+dimX-1,1) = kx';
+                        trajectoryProud(kcnt:kcnt+dimX-1,2) = ky(pcnt);
+                        trajectoryProud(kcnt:kcnt+dimX-1,3) = kz(pcnt);
+                        trajectoryProud(kcnt:kcnt+dimX-1,4:5) = dynamic;
+                        kcnt = kcnt + dimX;
 
                     end
 
@@ -2189,7 +2192,7 @@ classdef proudData
                 obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
 
                 % For multiple flip-angles
-                if nFA>1
+                if dimF>1
                     obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
                 end
 
@@ -2202,7 +2205,7 @@ classdef proudData
             obj.fillingSpace = fillkSpace(:,:,:,:,1,:);
 
             % For multiple flip-angles
-            if nFA>1
+            if dimF>1
                 obj.nsaSpace = permute(obj.nsaSpace,[1 2 3 5 4 6]);
                 obj.fillingSpace = permute(obj.fillingSpace,[1 2 3 5 4 6]);
             end
@@ -2227,105 +2230,104 @@ classdef proudData
             obj.fillingSpace = [];
 
             % Size of the image matrix (X, Y, Z, NR, NFA, NE)
-            dimx = obj.NO_SAMPLES;
-            dimy = obj.NO_VIEWS;
-            dimz = obj.NO_VIEWS_2;
-            nRep = obj.EXPERIMENT_ARRAY;        % Number of acquired dynamics
-            nDyn = app.NREditField.Value;       % Number of reconstructed dynamics
-            nTE = app.NEViewField.Value;        % Number of echo-times
-            nFA = app.NFAViewField.Value;       % Number of flip-angles
-            mtx = dimy*dimz*dimx;
+            dimX = obj.NO_SAMPLES;
+            dimY = obj.NO_VIEWS;
+            dimZ = obj.NO_VIEWS_2;
+            dimN = obj.EXPERIMENT_ARRAY;            % Number of acquired dynamics
+            dimD = app.NREditField.Value;           % Number of reconstructed dynamics
+            dimE = app.NEViewField.Value;           % Number of echo-times
+            dimF = app.NFAViewField.Value;          % Number of flip-angles
+            dimC = obj.nrCoils;                     % Number of coils                     
+            mtx = dimY*dimZ*dimX;
 
-
+            % ALERT NEEDS REVISION
             % For multiple flip-angles
-            if nFA > 1
-                nRep = nFA;
-                nDyn = nFA;
+            if dimF > 1
+                dimN = dimF;
+                dimD = dimF;
                 app.NREditField.Value = 1;
             end
 
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimC
 
-                app.TextMessage(strcat('Sorting coil',{' '},num2str(coil),' ...'));
+                app.TextMessage(strcat("Sorting coil ",num2str(coil)," ..."));
 
                 % Unsorted k-space for each coil
                 unsortedKspace = obj.unsKspace{coil};
-                unsortedKspace = reshape(unsortedKspace,dimx,dimy,dimz,nTE,nRep);
+                unsortedKspace = reshape(unsortedKspace,dimX,[],dimZ,dimE,dimN);
+                dimYL = size(unsortedKspace,2); % The real size of no_views
                 unsortedKspace = permute(unsortedKspace,[1,4,2,3,5]);
                 unsortedKspace = unsortedKspace(:);
-
+                
                 % Preallocate memory for the matrices
-                kSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
-                avgSpace = zeros(dimx, dimy, dimz, nDyn, 1, nTE);
-                trajectoryProud = ones(mtx*nRep,7);
+                kSpace = zeros(dimX, dimY, dimZ, dimD, 1, dimE);
+                avgSpace = zeros(dimX, dimY, dimZ, dimD, 1, dimE);
+                trajectoryProud = ones(length(unsortedKspace),7);
 
                 % Fill the ky and kz k-space locations
-                ky = round(obj.proudArray(1,:) + dimy/2 + 1);      % contains the y-coordinates of the custom k-space sequentially
-                kz = round(obj.proudArray(2,:) + dimz/2 + 1);      % contains the z-coordinates of the custom k-space sequentially
+                ky = round(obj.proudArray(1,:) + dimY/2 + 1);      % contains the y-coordinates of the custom k-space sequentially
+                kz = round(obj.proudArray(2,:) + dimZ/2 + 1);      % contains the z-coordinates of the custom k-space sequentially
 
                 % Some checks to keep k-space points within dimensions
-                ky(ky>dimy) = dimy;
+                ky(ky>dimY) = dimY;
                 ky(ky<1) = 1;
-                kz(kz>dimz) = dimz;
+                kz(kz>dimZ) = dimZ;
                 kz(kz<1) = 1;
 
                 % Duplicate for multiple acquired repetitions
-                ky = repmat(ky,1,nRep+1);
-                kz = repmat(kz,1,nRep+1);
+                ky = repmat(ky,1,dimN+1);
+                kz = repmat(kz,1,dimN+1);
                 ky = ky(:);
                 kz = kz(:);
 
                 % Number of k-space points per frame
-                kLinesPerFrame = round(dimy*dimz*nRep/nDyn);
-                app.TextMessage(strcat('k-lines per frame =',{' '},num2str(kLinesPerFrame),' ...'));
+                kLinesPerDynamic = round(dimYL*dimZ*dimN/dimD);
+                app.TextMessage(strcat("K-lines per dynamic = ",num2str(kLinesPerDynamic)," ..."));
 
                 % Trajectory counter
                 kcnt = 1;   % k-point counter
 
                 % Loop over desired number of frames
-                for dynamic = 1:nDyn
+                for dynamic = 1:dimD
 
-                    if nFA>1
+                    if dimF>1
                         app.TextMessage(strcat('Sorting flip-angle #',num2str(dynamic),' ...'));
                     else
                         app.TextMessage(strcat('Sorting dynamic #',num2str(dynamic),' ...'));
                     end
                     drawnow;
 
-                    wStart = (dynamic - 1) * kLinesPerFrame + 1;      % Starting k-line for specific frame
-                    wEnd = dynamic * kLinesPerFrame;                  % Ending k-line for specific frame
-                    wEnd(wEnd > dimy*dimz*nRep) = dimy*dimz*nRep;
+                    wStart = (dynamic - 1) * kLinesPerDynamic + 1;      % Starting k-line for specific frame
+                    wEnd = dynamic * kLinesPerDynamic;                  % Ending k-line for specific frame
+                    wEnd(wEnd > dimYL*dimZ*dimN) = dimYL*dimZ*dimN;
 
                     % Loop over y- and z-dimensions (views and views2)
                     for pcnt = wStart:wEnd
 
-                        % Loop over x-dimension (readout)
-                        for kx = 1:dimx
+                        % X-dimension (readout)
+                        kx = 1:dimX;
 
-                            % Loop over gradient-echoes
-                            for echo = 1:nTE
+                        % Loop over gradient-echoes
+                        for echo = 1:dimE
 
-                                % Fill the k-space and signal averages matrix
-                                if mod(echo,2)
-                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + kx);
-                                else
-                                    kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace((pcnt-1)*nTE*dimx + (echo-1)*dimx + (dimx-kx+1)); % reverse even echoes
-                                end
+                            % Odd or even gradient echo
+                            isOdd = mod(echo,2);
+                            readout = (pcnt-1)*dimE*dimX + (echo-1)*dimX + kx*isOdd + (dimX+1-kx)*(1-isOdd);
 
-                                % Fill averages space
-                                avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
+                            % Fill the k-space points
+                            kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = kSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + unsortedKspace(readout);
 
-                            end
-
-                            % Fill the k-space trajectory array
-                            trajectoryProud(kcnt,1) = kx;
-                            trajectoryProud(kcnt,2) = ky(pcnt);
-                            trajectoryProud(kcnt,3) = kz(pcnt);
-                            trajectoryProud(kcnt,4) = dynamic;
-                            trajectoryProud(kcnt,5) = dynamic;
-                            kcnt = kcnt + 1;
+                            % Fill averages space
+                            avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) = avgSpace(kx,ky(pcnt),kz(pcnt),dynamic,1,echo) + 1;
 
                         end
+
+                        % Fill the k-space trajectory array
+                        trajectoryProud(kcnt:kcnt+dimX-1,1) = kx';
+                        trajectoryProud(kcnt:kcnt+dimX-1,2) = ky(pcnt);
+                        trajectoryProud(kcnt:kcnt+dimX-1,3) = kz(pcnt);
+                        trajectoryProud(kcnt:kcnt+dimX-1,4:5) = dynamic;
+                        kcnt = kcnt + dimX;
 
                     end
 
@@ -2336,8 +2338,9 @@ classdef proudData
                 kSpace(isnan(kSpace)) = complex(0);
                 obj.rawKspace{coil} = kSpace(:,:,:,:,1,:);
 
+                % ALERT NEEDS REVISION
                 % For multiple flip-angles
-                if nFA>1
+                if dimF>1
                     obj.rawKspace{coil} = permute(obj.rawKspace{coil},[1 2 3 5 4 6]);
                 end
 
@@ -2349,8 +2352,9 @@ classdef proudData
             fillingkSpace(isnan(fillingkSpace)) = 0;
             obj.fillingSpace = fillingkSpace(:,:,:,:,1,:);
 
+            % ALERT NEEDS REVISION
             % For multiple flip-angles
-            if nFA>1
+            if dimF>1
                 obj.nsaSpace = permute(obj.nsaSpace,[1 2 3 5 4 6]);
                 obj.fillingSpace = permute(obj.fillingSpace,[1 2 3 5 4 6]);
             end
@@ -2398,7 +2402,7 @@ classdef proudData
 
             app.TextMessage('Performing EPI corrections ...');
 
-            [~,~,dimz,dimd,dimc] = size(kSpace);
+            [~,~,dimZ,dimD,dimC] = size(kSpace);
 
             % Parameters
             kCenter = 0.5;
@@ -2407,13 +2411,13 @@ classdef proudData
 
             % Calculate Ghost corrections
             dynamic = 0;
-            while (dynamic<dimd) && ~app.stopReco_flag
+            while (dynamic<dimD) && ~app.stopReco_flag
                 dynamic = dynamic + 1;
                 app.TextMessage(strcat("Ghost corrections dynamic ",num2str(dynamic)," ..."));
                 slice = 0;
-                while (slice<dimz) && ~app.stopReco_flag
+                while (slice<dimZ) && ~app.stopReco_flag
                     slice = slice + 1;
-                    for coil = 1:dimc
+                    for coil = 1:dimC
                         kSpaceGhost = squeeze(kSpace(:,:,slice,dynamic,coil));
                         try
                             kSpaceCorrected = applyEPIcorrection_mex(kSpaceGhost, kCenter, pCenter, method);
@@ -2492,16 +2496,16 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = applyTukey(obj)
 
-            obj.tukeyFilterWidth = 0.1;
-            dimx = size(obj.rawKspace{1},1);
-            dimy = size(obj.rawKspace{1},2);
-            dimz = size(obj.rawKspace{1},3);
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            dimC = obj.nrCoils;
 
             % Normalize k-space to convenient range
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimC 
                 maxPerCoil(coil) = max(abs(obj.rawKspace{coil}(:)));
             end
-            for coil = 1:obj.nrCoils
+            for coil = 1:dimC 
                 obj.rawKspace{coil} = obj.maxKspace*obj.rawKspace{coil}/max(maxPerCoil);
             end
 
@@ -2511,27 +2515,27 @@ classdef proudData
 
                     case {"2D","2Depi"}
 
-                        kSpaceSum = zeros(dimx,dimy);
-                        for coil = 1:obj.nrCoils
+                        kSpaceSum = zeros(dimX,dimY);
+                        for coil = 1:dimC 
                             kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{coil},[3 4 5 6 7 8]));
                         end
                         [row, col] = find(ismember(kSpaceSum, max(kSpaceSum(:))));
-                        for coil = 1:obj.nrCoils
-                            flt = proudData.circTukey2D(dimx,dimy,row,col,obj.tukeyFilterWidth);
+                        for coil = 1:dimC 
+                            flt = proudData.circTukey2D(dimX,dimY,row,col,obj.tukeyFilterWidth);
                             tukeyFilter(:,:,1,1,1,1) = flt;
                             obj.rawKspace{coil} = obj.rawKspace{coil}.*tukeyFilter;
                         end
                 
                     case "3D"
 
-                        kSpaceSum = zeros(dimx,dimy,dimz);
-                        for coil = 1:obj.nrCoils
+                        kSpaceSum = zeros(dimX,dimY,dimZ);
+                        for coil = 1:dimC 
                             kSpaceSum = kSpaceSum + squeeze(sum(obj.rawKspace{coil},[4 5 6 7 8]));
                         end
                         [~,idx] = max(kSpaceSum(:));
                         [lev, row, col] = ind2sub(size(kSpaceSum),idx);
-                        for coil=1:obj.nrCoils
-                            flt = proudData.circTukey3D(dimx,dimy,dimz,lev,row,col,obj.tukeyFilterWidth);
+                        for coil=1:dimC 
+                            flt = proudData.circTukey3D(dimX,dimY,dimZ,lev,row,col,obj.tukeyFilterWidth);
                             tukeyFilter(:,:,:,1,1,1) = flt;
                             obj.rawKspace{coil} = obj.rawKspace{coil}.*tukeyFilter;
                         end
@@ -2588,7 +2592,6 @@ classdef proudData
                             tmpKspace = sum(abs(obj.rawKspace{coil}),[4,5,6]);
                             [~,mIdx] = max(tmpKspace,[],"all","linear");
                             [x,y,z] = ind2sub(size(tmpKspace),mIdx);
-                            disp([x,y,z])
                             xmin = x-calibSize+1;
                             xmin(xmin<1) = 1;
                             xmax = x+calibSize;
@@ -2656,30 +2659,30 @@ classdef proudData
             TVd = app.TVtimeEditField.Value;
 
             % Input k-space dimensions
-            dimx = size(obj.rawKspace{1},1);
-            dimy = size(obj.rawKspace{1},2);
-            dimz = size(obj.rawKspace{1},3);
-            app.ZEditField.Value = dimz;
-            dimd = size(obj.rawKspace{1},4);
-            dimf = size(obj.rawKspace{1},5);
-            dime = size(obj.rawKspace{1},6);
-            dimc = obj.nrCoils;
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            app.ZEditField.Value = dimZ;
+            dimD = size(obj.rawKspace{1},4);
+            dimF = size(obj.rawKspace{1},5);
+            dimE = size(obj.rawKspace{1},6);
+            dimC = obj.nrCoils;
 
             % Requested image dimensions
-            ndimx = app.XEditField.Value;
-            ndimy = app.YEditField.Value;
-            ndimd = dimd;
-            if dimd > 1
-                ndimd = app.NREditField.Value;
+            ndimX = app.XEditField.Value;
+            ndimY = app.YEditField.Value;
+            ndimD = dimD;
+            if dimD > 1
+                ndimD = app.NREditField.Value;
             else
                 app.NREditField.Value = 1;
             end
 
             % Kspace data x,y,slice,dynamic,flipangle,echotime,coils
-            kSpace = zeros(dimx,dimy,dimz,dimd,dimf,dime,dimc);
+            kSpace = zeros(dimX,dimY,dimZ,dimD,dimF,dimE,dimC);
 
             % Fill k-space for reconstruction
-            for coil = 1:dimc
+            for coil = 1:dimC
                 kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
@@ -2693,7 +2696,7 @@ classdef proudData
                 % CS reco with BART
 
                 % Resize k-space to requested dimensions [ndimx ndimy slices ndimd]
-                kSpace = bart(app,['resize -c 0 ',num2str(ndimx),' 1 ',num2str(ndimy),' 3 ',num2str(ndimd)],kSpace);
+                kSpace = bart(app,['resize -c 0 ',num2str(ndimX),' 1 ',num2str(ndimY),' 3 ',num2str(ndimD)],kSpace);
 
                 % Bart dimensions
                 % 	READ_DIM,       1   z
@@ -2723,15 +2726,15 @@ classdef proudData
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
                     % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
-                    sensitivities = zeros(1,ndimy,ndimx,dimc,1,1,1,1,1,1,ndimd,1,1,dimz);
-                    for slice = 1:dimz
+                    sensitivities = zeros(1,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,dimZ);
+                    for slice = 1:dimZ
                         app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice ",num2str(slice)," ..."));
                         sensitivities(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice) = bart(app,'ecalib -d1 -S -I -a -m1', kSpacePics(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice));
                     end
 
                 else
 
-                    sensitivities = zeros(1,ndimy,ndimx,dimc,1,1,1,1,1,1,ndimd,1,1,dimz);
+                    sensitivities = zeros(1,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,dimZ);
                     for coil = 1:obj.maxCoils
                         if logical(obj.coilActive_flag(coil))
                             sensitivities(1,:,:,coil,1,1,1,1,1,1,:,1,1,:) = obj.coilSensitivities(coil);
@@ -2742,14 +2745,15 @@ classdef proudData
 
                 % Construct the sensitivity maps for the app {coil} x, y, slices, dynamics, flip-angle, echo-time ...
                 senseMap = permute(abs(sensitivities),[3 2 14 11 4 6 5 1 7 8 9 10 12 13 15]);
+                senseMap = senseMap/max(senseMap(:));
                 senseMap = flip(senseMap,2);
                 if obj.PHASE_ORIENTATION == 0
                     senseMap = flip(senseMap,1);
                 end
                 for coil = 1:obj.maxCoils
-                    for echo = 1:dime
-                        for fa = 1:dimf
-                            if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimc)
+                    for echo = 1:dimE
+                        for fa = 1:dimF
+                            if (logical(obj.coilActive_flag(coil)) == 1) && (coil <= dimC)
                                 obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = senseMap(:,:,:,:,coil,1,1,1,1,1,1,1,1,1,1);
                             else
                                 obj.sensitivityMaps{coil}(:,:,:,:,fa,echo) = zeros(size(senseMap(:,:,:,:,1,1,1,1,1,1,1,1,1,1,1)));
@@ -2772,7 +2776,7 @@ classdef proudData
                 end
                 if LR>0
                     % Locally low-rank in the spatial domain
-                    blocksize = round(max([ndimx ndimy])/16);  % Block size
+                    blocksize = round(max([ndimX ndimY])/16);  % Block size
                     app.TextMessage(strcat('Low-rank block size =',{' '},num2str(blocksize)));
                     picsCommand = [picsCommand,' -RL:6:6:',num2str(LR),' -b',num2str(blocksize)];
                 end
@@ -2781,22 +2785,22 @@ classdef proudData
                 end
 
                 % PICS reconstruction
-                imageReco = zeros(ndimy,ndimx,1,1,1,dime,dimf,1,1,1,ndimd,1,1,dimz);
+                imageReco = zeros(ndimY,ndimX,1,1,1,dimE,dimF,1,1,1,ndimD,1,1,dimZ);
 
                 % Initialize progress counter
-                app.totalCounter = dime*dimf*dimz;
+                app.totalCounter = dimE*dimF*dimZ;
                 app.progressCounter = 0;
 
                 echo = 0;
-                while (echo < dime) && ~app.stopReco_flag
+                while (echo < dimE) && ~app.stopReco_flag
                     echo = echo + 1;
 
                     fa = 0;
-                    while (fa < dimf) && ~app.stopReco_flag
+                    while (fa < dimF) && ~app.stopReco_flag
                         fa = fa + 1;
 
                         slice = 0;
-                        while (slice < dimz) && ~app.stopReco_flag
+                        while (slice < dimZ) && ~app.stopReco_flag
                             slice = slice + 1;
 
                             % Bart reco
@@ -2826,9 +2830,9 @@ classdef proudData
 
                 % Masking of EPI data
                 if strcmp(obj.dataType,'2Depi')
-                    for dynamic = 1:ndimd
-                        for slice = 1:dimz
-                            msk(:,:,slice,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[ndimx ndimy]);
+                    for dynamic = 1:ndimD
+                        for slice = 1:dimZ
+                            msk(:,:,slice,dynamic) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[ndimX ndimY]);
                         end
                     end
                     imagesOut = imagesOut.*flip(msk,2);
@@ -2843,39 +2847,39 @@ classdef proudData
                 % k-space for reconstruction [X Y slices dynamics coils]
 
                 % Interpolate in the dynamics dimension
-                if ndimd ~= dimd
-                    kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimd 1 1 1],'cubic');
-                    ndimd = size(kSpace,4);
-                    app.NREditField.Value = ndimd;
+                if ndimD ~= dimD
+                    kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimD/dimD 1 1 1],'cubic');
+                    ndimD = size(kSpace,4);
+                    app.NREditField.Value = ndimD;
                 end
 
                 % Preallocate
-                imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimf,dime);
+                imagesOut = zeros(ndimX,ndimY,dimZ,ndimD,dimF,dimE);
 
                 % Initialize progress counter
-                app.totalCounter = dime*dimf*dimz;
+                app.totalCounter = dimE*dimF*dimZ;
                 app.progressCounter = 0;
 
                 echo = 0;
-                while (echo < dime) && ~app.stopReco_flag
+                while (echo < dimE) && ~app.stopReco_flag
                     echo = echo + 1;
 
                     fa = 0;
-                    while (fa < dimf) && ~app.stopReco_flag
+                    while (fa < dimF) && ~app.stopReco_flag
                         fa = fa + 1;
 
                         slice = 0;
-                        while (slice < dimz) && ~app.stopReco_flag
+                        while (slice < dimZ) && ~app.stopReco_flag
                             slice = slice + 1;
 
                             % Fool the reco if dimd = 1, it needs at least 2 dynamics
-                            if ndimd == 1
+                            if ndimD == 1
                                 kSpace(:,:,slice,2,fa,echo,:) = kSpace(:,:,slice,1,fa,echo,:);
-                                kData = zeros(dimx,dimy,2,dimc);
-                                kMask = zeros(dimx,dimy,2);
+                                kData = zeros(dimX,dimY,2,dimC);
+                                kMask = zeros(dimX,dimY,2);
                             else
-                                kData = zeros(dimx,dimy,ndimd,dimc);
-                                kMask = zeros(dimx,dimy,ndimd);
+                                kData = zeros(dimX,dimY,ndimD,dimC);
+                                kMask = zeros(dimX,dimY,ndimD);
                             end
 
                             % Kspace of slice
@@ -2883,39 +2887,39 @@ classdef proudData
                             kMask(:,:,:) = logical(abs(kSpace(:,:,slice,:,fa,echo,1)));
 
                             % Zero-fill or crop x-dimension
-                            if ndimx > dimx
-                                padsizex = round((ndimx - dimx)/2);
+                            if ndimX > dimX
+                                padsizex = round((ndimX - dimX)/2);
                                 kdatai = padarray(kData,[padsizex,0,0,0],'both');
                                 maski = padarray(kMask,[padsizex,0,0],'both');
                             else
-                                cropsize = round((dimx - ndimx)/2)-1;
+                                cropsize = round((dimX - ndimX)/2)-1;
                                 cropsize(cropsize<0)=0;
                                 kdatai = kData(cropsize+1:end-cropsize,:,:,:);
                                 maski = kMask(cropsize+1:end-cropsize,:,:);
                             end
 
                             % Zero-fill or crop y-dimension
-                            if ndimy > dimy
-                                padsizey = round((ndimy - dimy)/2);
+                            if ndimY > dimY
+                                padsizey = round((ndimY - dimY)/2);
                                 kdatai = padarray(kdatai,[0,padsizey,0,0],'both');
                                 maski = padarray(maski,[0,padsizey,0],'both');
                             else
-                                cropsize = round((dimy - ndimy)/2)-1;
+                                cropsize = round((dimY - ndimY)/2)-1;
                                 cropsize(cropsize<0)=0;
                                 kdatai = kdatai(:,cropsize+1:end-cropsize,:,:);
                                 maski = maski(:,cropsize+1:end-cropsize,:);
                             end
 
                             % Make sure dimensions are exactly ndimx, ndimy
-                            kdatai = kdatai(1:ndimx,1:ndimy,:,:);
-                            maski = maski(1:ndimx,1:ndimy,:);
+                            kdatai = kdatai(1:ndimX,1:ndimY,:,:);
+                            maski = maski(1:ndimX,1:ndimY,:);
 
                             % Normalize the data in the range of approx 0 - 1 for better numerical stability
                             kdatai = kdatai/max(abs(kdatai(:)));
 
                             % Coil sensitivity map
-                            for coil = 1:dimc
-                                b1(:,:,coil) = ones(ndimx,ndimy)*obj.coilSensitivities(coil);
+                            for coil = 1:dimC
+                                b1(:,:,coil) = ones(ndimX,ndimY)*obj.coilSensitivities(coil);
                             end
 
                             % Data
@@ -2938,7 +2942,7 @@ classdef proudData
 
                             % Linear reconstruction
                             nrd = size(kdatai,3);
-                            kdata1 = squeeze(randn(ndimx,ndimy,nrd,dimc))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
+                            kdata1 = squeeze(randn(ndimX,ndimY,nrd,dimC))/2000 + kdatai;  % add a little bit of randomness, such that linear reco is not exactly right
                             recon_dft = param.E'*kdata1;
 
                             % Iterative reconstruction
@@ -2949,7 +2953,7 @@ classdef proudData
                             imageReco = recon_cs;
 
                             % Output reconstructed image
-                            if dimd == 1
+                            if dimD == 1
                                 imagesOut(:,:,slice,:,fa,echo) = imageReco(:,:,1);
                             else
                                 imagesOut(:,:,slice,:,fa,echo) = imageReco;
@@ -2957,7 +2961,7 @@ classdef proudData
 
                             % Masking of EPI data
                             if strcmp(obj.dataType,'2Depi')
-                                for dynamic = 1:ndimd
+                                for dynamic = 1:ndimD
                                     msk(:,:,1,dynamic,fa,echo) = imresize(squeeze(obj.epiMask(:,:,slice,1)),[size(imagesOut,1) size(imagesOut,2)]);
                                 end
                                 imagesOut(:,:,slice,:,fa,echo) = imagesOut(:,:,slice,:,fa,echo).*flip(msk,2);
@@ -2983,12 +2987,12 @@ classdef proudData
                 imagesOut = circshift(imagesOut,-1,2);
                 imagesOut = circshift(imagesOut,1,1);
 
-                % Fake coil sensitivities
+                % Make coil sensitivity maps
                 for coil = 1:obj.maxCoils
-                    if logical(obj.coilActive_flag(coil)) == 1 && (coil <= dimc)
-                        obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
+                        obj.sensitivityMaps{coil} = ones(size(obj.rawKspace{coil}))*obj.coilSensitivities(coil);
                     else
-                        obj.sensitivityMaps{coil} = zeros(size(imagesOut));
+                        obj.sensitivityMaps{coil} = zeros(size(obj.rawKspace{1}));
                     end
                 end
 
@@ -3013,45 +3017,44 @@ classdef proudData
         function obj = fftReco2D(obj, app)
 
             % Dimensions
-            dimx = size(obj.rawKspace{1},1);
-            dimy = size(obj.rawKspace{1},2);
-            dimz = size(obj.rawKspace{1},3);
-            dimd = size(obj.rawKspace{1},4);
-            dimf = size(obj.rawKspace{1},5);
-            dime = size(obj.rawKspace{1},6);
-            dimc = obj.nrCoils;
+            dimX = size(obj.rawKspace{1},1);
+            dimY = size(obj.rawKspace{1},2);
+            dimZ = size(obj.rawKspace{1},3);
+            dimD = size(obj.rawKspace{1},4);
+            dimF = size(obj.rawKspace{1},5);
+            dimE = size(obj.rawKspace{1},6);
+            dimC = obj.nrCoils;
 
             % Requested new dimensions
             ndimx = app.XEditField.Value;
             ndimy = app.YEditField.Value;
-            ndimd = dimd;
-            if dimd > 1
+            ndimd = dimD;
+            if dimD > 1
                 ndimd = app.NREditField.Value;
             else
                 app.NREditField.Value = 1;
             end
 
             % Slice interpolation not implemented
-            app.ZEditField.Value = dimz;
+            app.ZEditField.Value = dimZ;
 
             % Kspace data x,y,slice,dynamic,flipangle,echotime,coils
-            kSpace = zeros(dimx,dimy,dimz,dimd,dimf,dime,dimc);
+            kSpace = zeros(dimX,dimY,dimZ,dimD,dimF,dimE,dimC);
 
             % Fill k-space for reconstruction
-            for coil = 1:dimc
+            for coil = 1:dimC
                 kSpace(:,:,:,:,:,:,coil) = obj.rawKspace{coil}*obj.coilActive_flag(coil)/obj.coilSensitivities(coil);
             end
 
             % Interpolate in the dynamics dimension
-            if ndimd ~= dimd
-                kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimd 1 1 1],'cubic');
+            if ndimd ~= dimD
+                kSpace = obj.matrixInterpolate(kSpace,[1 1 1 ndimd/dimD 1 1 1],'cubic');
                 ndimd = size(kSpace,4);
                 app.NREditField.Value = ndimd;
             end
 
-
             % Preallocate output images
-            imagesOut = zeros(ndimx,ndimy,dimz,ndimd,dimf,dime);
+            imagesOut = zeros(ndimx,ndimy,dimZ,ndimd,dimF,dimE);
 
             % For EPI data
             if strcmp(obj.dataType,'2Depi')
@@ -3059,17 +3062,17 @@ classdef proudData
             end
 
             % Initialize progress counter
-            app.totalCounter = dime*dimf*ndimd*dimz;
+            app.totalCounter = dimE*dimF*ndimd*dimZ;
             app.progressCounter = 0;
 
             % Echo loop
             echo = 0;
-            while (echo < dime) && ~app.stopReco_flag
+            while (echo < dimE) && ~app.stopReco_flag
                 echo = echo + 1;
 
                 % flip-angle loop
                 fa = 0;
-                while (fa < dimf) && ~app.stopReco_flag
+                while (fa < dimF) && ~app.stopReco_flag
                     fa = fa + 1;
 
                     % Dynamic loop
@@ -3079,7 +3082,7 @@ classdef proudData
 
                         % Slice loop
                         slice = 0;
-                        while (slice<dimz) && ~app.stopReco_flag
+                        while (slice<dimZ) && ~app.stopReco_flag
                             slice = slice + 1;
 
                             % Input K-space
@@ -3096,25 +3099,25 @@ classdef proudData
                             image2D = image2Dhom.*exp(-1i*phase2Dhom);
 
                             % Zero-fill or crop x-dimension and/or y-dimension
-                            if (ndimx ~= dimx) || (ndimy ~= dimy)
+                            if (ndimx ~= dimX) || (ndimy ~= dimY)
 
                                 % Back to k-space
                                 kDatai = obj.fft2Dmri(image2D);
 
-                                if ndimx > dimx
-                                    padsizex = round((ndimx - dimx)/2);
+                                if ndimx > dimX
+                                    padsizex = round((ndimx - dimX)/2);
                                     kDatai = padarray(kDatai,[padsizex,0,0],'both');
                                 else
-                                    cropsize = round((dimx - ndimx)/2)-1;
+                                    cropsize = round((dimX - ndimx)/2)-1;
                                     cropsize(cropsize<0)=0;
                                     kDatai = kDatai(cropsize+1:end-cropsize,:,:);
                                 end
 
-                                if ndimy > dimy
-                                    padsizey = round((ndimy - dimy)/2);
+                                if ndimy > dimY
+                                    padsizey = round((ndimy - dimY)/2);
                                     kDatai = padarray(kDatai,[0,padsizey,0],'both');
                                 else
-                                    cropsize = round((dimy - ndimy)/2)-1;
+                                    cropsize = round((dimY - ndimy)/2)-1;
                                     cropsize(cropsize<0)=0;
                                     kDatai = kDatai(:,cropsize+1:end-cropsize,:);
                                 end
@@ -3136,7 +3139,7 @@ classdef proudData
                             end
 
                             % Coil combine
-                            if dimc>1
+                            if dimC>1
                                 imageTmp(:,:,1,1,:) = image2D;
                                 try
                                     image2D = coilCombine_mex(imageTmp);
@@ -3169,10 +3172,10 @@ classdef proudData
 
             % Make coil sensitivity maps
             for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
+                    obj.sensitivityMaps{coil} = ones(size(obj.rawKspace{coil}))*obj.coilSensitivities(coil);
                 else
-                    obj.sensitivityMaps{coil} = zeros(size(imagesOut));
+                    obj.sensitivityMaps{coil} = zeros(size(obj.rawKspace{1}));
                 end
             end
 
@@ -3533,7 +3536,7 @@ classdef proudData
 
                 % Make coil sensitivity maps
                 for coil = 1:obj.maxCoils
-                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
+                    if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
                         obj.sensitivityMaps{coil} = ones(size(imageSlab))*obj.coilSensitivities(coil);
                     else
                         obj.sensitivityMaps{coil} = zeros(size(imageSlab));
@@ -3785,10 +3788,10 @@ classdef proudData
 
             % Make coil sensitivity maps
             for coil = 1:obj.maxCoils
-                if logical(obj.coilActive_flag(coil)) == 1 && coil <= obj.nrCoils
-                    obj.sensitivityMaps{coil} = ones(size(imagesOut))*obj.coilSensitivities(coil);
+                if logical(obj.coilActive_flag(coil)) == 1 && coil <= dimC
+                    obj.sensitivityMaps{coil} = ones(size(obj.rawKspace{coil}))*obj.coilSensitivities(coil);
                 else
-                    obj.sensitivityMaps{coil} = zeros(size(imagesOut));
+                    obj.sensitivityMaps{coil} = zeros(size(obj.rawKspace{1}));
                 end
             end
 
@@ -5490,10 +5493,10 @@ classdef proudData
                     im = obj.images;
 
                     % Image dimensions (X, Y, Z, NR, NFA, NE)
-                    nSlices = size(im,3);
-                    nDyn = size(im,4);
-                    nFA = size(im,5);
-                    nTE = size(im,6);
+                    dimZ = size(im,3);
+                    dimD = size(im,4);
+                    dimF = size(im,5);
+                    dimE = size(im,6);
 
                     % Denoising window
                     w = app.DeNoiseWindowEditField.Value;
@@ -5507,33 +5510,32 @@ classdef proudData
 
                     % Loop over all slices, dynamics, flip-angles, echo-times
                     % Choose 2-dim image + extra dimension
-                    if nTE > 1
+                    if dimE > 1
 
-                        for slice = 1:nSlices
-                            for dyn = 1:nDyn
-                                for fas = 1:nFA
-                                    im(:,:,slice,dyn,fas,:) = denoise(double(squeeze(im(:,:,slice,dyn,fas,:))),window);
+                        for slice = 1:dimZ
+                            for dynamic = 1:dimD
+                                for fa = 1:dimF
+                                    im(:,:,slice,dynamic,fa,:) = denoise(double(squeeze(im(:,:,slice,dynamic,fa,:))),window);
                                 end
                             end
                         end
 
-                    elseif nFA > 1
+                    elseif dimF > 1
 
-                        for slice = 1:nSlices
-                            for dyn = 1:nDyn
-                                im(:,:,slice,dyn,:,1) = denoise(double(squeeze(im(:,:,slice,dyn,:,1))),window);
+                        for slice = 1:dimZ
+                            for dynamic = 1:dimD
+                                im(:,:,slice,dynamic,:,1) = denoise(double(squeeze(im(:,:,slice,dynamic,:,1))),window);
                             end
                         end
 
-                    elseif nDyn > 1
+                    elseif dimD > 1
 
-                        for slice = 1:nSlices
+                        for slice = 1:dimZ
                             im(:,:,slice,:,1,1) = denoise(double(squeeze(im(:,:,slice,:,1,1))),window);
                         end
 
                     else
 
-                        % nTE, nFA, nDyn = 1
                         im(:,:,:,1,1,1) = denoise(double(squeeze(im(:,:,:,1,1,1))),window);
 
                     end
@@ -5573,15 +5575,15 @@ classdef proudData
                 params = [1 3 20];
 
                 % image dimensions (X, Y, Z, NR, NFA, NE)
-                nDyn = size(im,4);
-                nFA = size(im,5);
-                nTE = size(im,6);
+                dimD = size(im,4);
+                dimF = size(im,5);
+                dimE = size(im,6);
 
                 % unRing
-                for dyn = 1:nDyn
-                    for fas = 1:nFA
-                        for tes = 1:nTE
-                            im(:,:,:,dyn,fas,tes) = ringRm(double(squeeze(im(:,:,:,dyn,fas,tes))),params);
+                for dynamic = 1:dimD
+                    for fa = 1:dimF
+                        for echo = 1:dimE
+                            im(:,:,:,dynamic,fa,echo) = ringRm(double(squeeze(im(:,:,:,dynamic,fa,echo))),params);
                         end
                     end
                 end
@@ -5619,16 +5621,18 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = scaleKspace(obj)
 
+            dimC = obj.nrCoils;
+
             % Determine max abs(kSpace) value
             mx1 = zeros(obj.nrCoils,1);
-            for i=1:obj.nrCoils
-                mx1(i) = max(abs(obj.rawKspace{i}(:)));
+            for coil = 1:dimC
+                mx1(coil) = max(abs(obj.rawKspace{coil}(:)));
             end
             mx = double(round(max(mx1(:))));
 
             % Scale
-            for i=1:obj.nrCoils
-                obj.rawKspace{i} = obj.maxKspace*obj.rawKspace{i}/mx;
+            for coil = 1:dimC
+                obj.rawKspace{coil} = obj.maxKspace*obj.rawKspace{coil}/mx;
             end
 
         end % scaleImages
@@ -5643,25 +5647,25 @@ classdef proudData
 
             % Calculate pixel size in different dimensions
 
-            [dimx,dimy,dimz,NR,NFA,NE] = size(obj.images);
+            [dimX, dimY, dimZ, dimD, dimF, dimE] = size(obj.images);
 
-            fovx = app.FOVViewField1.Value;
-            fovy = app.FOVViewField2.Value;
+            fovX = app.FOVViewField1.Value;
+            fovY = app.FOVViewField2.Value;
             if contains(obj.dataType,'3D')
-                fovz = app.FOVViewField3.Value;
+                fovZ = app.FOVViewField3.Value;
             else
-                fovz = app.FOVViewField3.Value*dimz;
+                fovZ = app.FOVViewField3.Value*dimZ;
             end
-            meanFov = mean([fovx fovy fovz]); % not really a physical dimension, but average of x,y and z
+            meanFov = mean([fovX fovY fovZ]); % not really a physical dimension, but average of x,y and z
 
-            resx = fovx/dimx;
-            resy = fovy/dimy;
-            resz = fovz/dimz;
-            resNR = meanFov/NR;
-            resNFA = meanFov/NFA;
-            resNE = meanFov/NE;
+            resX = fovX/dimX;
+            resY = fovY/dimY;
+            resZ = fovZ/dimZ;
+            resD = meanFov/dimD;
+            resF = meanFov/dimF;
+            resE = meanFov/dimE;
 
-            obj.pixelSize = [resx resy resz resNR resNFA resNE 1];
+            obj.pixelSize = [resX resY resZ resD resF resE 1];
 
         end % calcPixelSize
 
@@ -5680,7 +5684,7 @@ classdef proudData
                 case {"2D","2Dradial","2Depi"}
 
                     % Images = (X, Y, slices, NR, NFA, NE)
-                    [~, ~, slices, NR, NFA, NE] = size(im);
+                    [~, ~, dimZ, dimD, dimF, dimE] = size(im);
 
                     % Shift image to prevent pixel-shift after FFT
                     if obj.PHASE_ORIENTATION == 1
@@ -5691,11 +5695,11 @@ classdef proudData
                     end
 
                     kSpace = zeros(size(im));
-                    for i = 1:slices
-                        for j = 1:NR
-                            for k = 1:NFA
-                                for w = 1:NE
-                                    kSpace(:,:,i,j,k,w) = proudData.fft2Dmri(squeeze(im(:,:,i,j,k,w)));
+                    for slice = 1:dimZ
+                        for dynamic = 1:dimD
+                            for fa = 1:dimF
+                                for echo = 1:dimE
+                                    kSpace(:,:,slice,dynamic,fa,echo) = proudData.fft2Dmri(squeeze(im(:,:,slice,dynamic,fa,echo)));
                                 end
                             end
                         end
@@ -5713,7 +5717,7 @@ classdef proudData
                 case {"3D","3Dute"}
 
                     % Images = (X, Y, Z, NR, NFA, NE)
-                    [~, ~, ~, NR, NFA, NE] = size(im);
+                    [~, ~, ~, dimD, dimF, dimE] = size(im);
 
                     % Shift image to prevent pixel-shift after FFT
                     if obj.PHASE_ORIENTATION == 1
@@ -5726,10 +5730,10 @@ classdef proudData
                     end
 
                     kSpace = zeros(size(im));
-                    for j = 1:NR
-                        for k = 1:NFA
-                            for w = 1:NE
-                                kSpace(:,:,:,j,k,w) = proudData.fft3Dmri(squeeze(im(:,:,:,j,k,w)));
+                    for dynamic = 1:dimD
+                        for fa = 1:dimF
+                            for echo = 1:dimE
+                                kSpace(:,:,:,dynamic,fa,echo) = proudData.fft3Dmri(squeeze(im(:,:,:,dynamic,fa,echo)));
                             end
                         end
                     end
@@ -5802,39 +5806,40 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         function obj = unwrap3D(obj)
 
-            slices = size(obj.phaseImages,3);
-            dynamics = size(obj.phaseImages,4);
-            echoes = size(obj.phaseImages,6);
+            dimZ = size(obj.phaseImages,3);
+            dimD = size(obj.phaseImages,4);
+            dimF = size(obj.phaseImages,5);
+            dimE = size(obj.phaseImages,6);
 
-            if slices > 1
+            if dimZ > 1
                 % 3D or multi-slice
-                for i = 1:size(obj.phaseImages,4)
-                    for j = 1:size(obj.phaseImages,5)
-                        for k = 1:size(obj.phaseImages,6)
-                            obj.phaseImages(:,:,:,i,j,k) = unwrap3(squeeze(obj.phaseImages(:,:,:,i,j,k)),squeeze(obj.mask(:,:,:,i,j,k)));
+                for dynamic = 1:dimD
+                    for fa = 1:dimF
+                        for echo = 1:dimE
+                            obj.phaseImages(:,:,:,dynamic,fa,echo) = unwrap3(squeeze(obj.phaseImages(:,:,:,dynamic,fa,echo)),squeeze(obj.mask(:,:,:,dynamic,fa,echo)));
                         end
                     end
                 end
-            elseif echoes > 1
+            elseif dimE > 1
                 % Single slice with multiple echoes
-                for i = 1:size(obj.phaseImages,4)
-                    for j = 1:size(obj.phaseImages,5)
-                        obj.phaseImages(:,:,1,i,j,:) = unwrap3(squeeze(obj.phaseImages(:,:,1,i,j,:)),squeeze(obj.mask(:,:,1,i,j,:)));
+                for dynamic = 1:dimD
+                    for fa = 1:dimF
+                        obj.phaseImages(:,:,1,dynamic,fa,:) = unwrap3(squeeze(obj.phaseImages(:,:,1,dynamic,fa,:)),squeeze(obj.mask(:,:,1,dynamic,fa,:)));
                     end
                 end
-            elseif dynamics > 1
+            elseif dimD > 1
                 % Single slice with multiple dynamics
-                for j = 1:size(obj.phaseImages,5)
-                    for k = 1:size(obj.phaseImages,6)
-                        obj.phaseImages(:,:,1,:,j,k) = unwrap3(squeeze(obj.phaseImages(:,:,1,:,j,k)),squeeze(obj.mask(:,:,1,:,j,k)));
+                for fa = 1:dimF
+                    for echo = 1:dimE
+                        obj.phaseImages(:,:,1,:,fa,echo) = unwrap3(squeeze(obj.phaseImages(:,:,1,:,fa,echo)),squeeze(obj.mask(:,:,1,:,fa,echo)));
                     end
                 end
             else
                 % 2D single slice
-                for i = 1:size(obj.phaseImages,4)
-                    for j = 1:size(obj.phaseImages,5)
-                        for k = 1:size(obj.phaseImages,6)
-                            obj.phaseImages(:,:,1,i,j,k) = unwrap2(squeeze(obj.phaseImages(:,:,1,i,j,k)),squeeze(obj.mask(:,:,1,i,j,k)));
+                for dynamic = 1:dimD
+                    for fa = 1:dimF
+                        for echo = 1:dimE
+                            obj.phaseImages(:,:,1,dynamic,fa,echo) = unwrap2(squeeze(obj.phaseImages(:,:,1,dynamic,fa,echo)),squeeze(obj.mask(:,:,1,dynamic,fa,echo)));
                         end
                     end
                 end
@@ -6001,14 +6006,14 @@ classdef proudData
         function obj = get3DimageShift(obj, app, image)
 
             % Image dimensions in pixels  (x,y,z,nr,fa,ne)
-            dx = size(image,1);
-            dy = size(image,2);
-            dz = size(image,3);
+            dimX = size(image,1);
+            dimY = size(image,2);
+            dimZ = size(image,3);
 
             % Calculate the shift
-            relShiftX = dx*obj.fov_read_off/4000;      % Relative offset, scaling from PPL file
-            relShiftY = dy*obj.fov_phase_off/4000;
-            relShiftZ = dz*obj.fov_slice_off/400;
+            relShiftX = dimX*obj.fov_read_off/4000;      % Relative offset, scaling from PPL file
+            relShiftY = dimY*obj.fov_phase_off/4000;
+            relShiftZ = dimZ*obj.fov_slice_off/400;
 
             % Different readout / phase depending on phase_orientation value
             if obj.PHASE_ORIENTATION
@@ -6050,12 +6055,14 @@ classdef proudData
             % Retrieve the in-plane image shifts
             obj = obj.get3DimageShift(app, obj.images);
 
+            [~,~,dimZ,dimD,dimF,dimE] = size(obj.images);
+
             % Apply the shift on sub-pixel level to the complex images
-            for echo = 1:size(obj.images,6)
-                for flipAngle = 1:size(obj.images,5)
-                    for dynamic = 1:size(obj.images,4)
-                        for slice = 1:size(obj.images,3)
-                            obj.complexImages(:,:,slice,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,flipAngle,echo)),obj.yShift(slice),obj.xShift(slice));
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for slice = 1:dimZ
+                            obj.complexImages(:,:,slice,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,fa,echo)),obj.yShift(slice),obj.xShift(slice));
                         end
                     end
                 end
@@ -6079,22 +6086,24 @@ classdef proudData
             % Retrieve the in-plane image shifts
             obj = obj.get3DimageShift(app, obj.images);
 
+            [dimX,~,dimZ,dimD,dimF,dimE] = size(obj.images);
+
             % Apply the shift on sub-pixel level to the complex images
-            for echo = 1:size(obj.images,6)
-                for flipAngle = 1:size(obj.images,5)
-                    for dynamic = 1:size(obj.images,4)
-                        for slice = 1:size(obj.images,3)
-                            obj.complexImages(:,:,slice,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,flipAngle,echo)),obj.yShift(1),obj.xShift(1));
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for slice = 1:dimZ
+                            obj.complexImages(:,:,slice,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,fa,echo)),obj.yShift(1),obj.xShift(1));
                         end
                     end
                 end
             end
 
-            for echo = 1:size(obj.images,6)
-                for flipAngle = 1:size(obj.images,5)
-                    for dynamic = 1:size(obj.images,4)
-                        for readout = 1:size(obj.images,1)
-                            obj.complexImages(readout,:,:,dynamic,flipAngle,echo) = obj.image2Dshift(squeeze(obj.complexImages(readout,:,:,dynamic,flipAngle,echo)),obj.zShift(1),0);
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for x = 1:dimX
+                            obj.complexImages(x,:,:,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(x,:,:,dynamic,fa,echo)),obj.zShift(1),0);
                         end
                     end
                 end
@@ -6129,7 +6138,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % 2D Tukey filter
         % ---------------------------------------------------------------------------------
-        function output = circTukey2D(dimy,dimx,row,col,filterwidth)
+        function output = circTukey2D(dimY,dimX,row,col,filterwidth)
 
             domain = 256;
             base = zeros(domain,domain);
@@ -6137,17 +6146,17 @@ classdef proudData
             tukey1 = tukeywin(domain,filterwidth);
             tukey1 = tukey1(domain/2+1:domain);
 
-            shifty = (row-dimy/2)*domain/dimy;
-            shiftx = (col-dimx/2)*domain/dimx;
+            shiftY = (row-dimY/2)*domain/dimY;
+            shiftX = (col-dimX/2)*domain/dimX;
 
             y = linspace(-domain/2, domain/2, domain);
             x = linspace(-domain/2, domain/2, domain);
 
-            for i=1:domain
+            for i = 1:domain
 
-                for j=1:domain
+                for j = 1:domain
 
-                    rad = round(sqrt((shiftx-x(i))^2 + (shifty-y(j))^2));
+                    rad = round(sqrt((shiftX-x(i))^2 + (shiftY-y(j))^2));
 
                     if (rad <= domain/2) && (rad > 0)
 
@@ -6159,7 +6168,7 @@ classdef proudData
 
             end
 
-            output = imresize(base,[dimy dimx]);
+            output = imresize(base,[dimY dimX]);
 
         end
 
@@ -6168,7 +6177,7 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % 3D Tukey filter
         % ---------------------------------------------------------------------------------
-        function output = circTukey3D(dimz,dimy,dimx,lev,row,col,filterwidth)
+        function output = circTukey3D(dimZ,dimY,dimX,lev,row,col,filterwidth)
 
             domain = 256;
 
@@ -6177,21 +6186,21 @@ classdef proudData
             tukey1 = tukeywin(domain,filterwidth);
             tukey1 = tukey1(domain/2+1:domain);
 
-            shiftz = (lev-dimz/2)*domain/dimz;
-            shifty = (row-dimy/2)*domain/dimy;
-            shiftx = (col-dimx/2)*domain/dimx;
+            shiftZ = (lev-dimZ/2)*domain/dimZ;
+            shiftY = (row-dimY/2)*domain/dimY;
+            shiftX = (col-dimX/2)*domain/dimX;
 
             z = linspace(-domain/2, domain/2, domain);
             y = linspace(-domain/2, domain/2, domain);
             x = linspace(-domain/2, domain/2, domain);
 
-            for i=1:domain
+            for i = 1:domain
 
-                for j=1:domain
+                for j = 1:domain
 
                     for k = 1:domain
 
-                        rad = round(sqrt((shiftx-x(i))^2 + (shifty-y(j))^2 + (shiftz-z(k))^2));
+                        rad = round(sqrt((shiftX-x(i))^2 + (shiftY-y(j))^2 + (shiftZ-z(k))^2));
 
                         if (rad <= domain/2) && (rad > 0)
 
@@ -6205,7 +6214,7 @@ classdef proudData
 
             end
 
-            output = imresize3(base,[dimz dimy dimx]);
+            output = imresize3(base,[dimZ dimY dimX]);
 
         end
 
@@ -7085,20 +7094,20 @@ classdef proudData
         % ---------------------------------------------------------------------------------
         % 2D radial 0 - 180 trajectory
         % ---------------------------------------------------------------------------------
-        function traj = twoDradialTrajectory(dimx, dimy, dimz, dimd, dimf, dime)
+        function traj = twoDradialTrajectory(dimX, dimY, dimZ, dimD, dimF, dimE)
 
             % Make the radial trajectory 0-180 degrees
             % Could be extended with different trajectories if available
 
             fullAngle = 180;
-            for echo = 1:dime
-                for fa = 1:dimf
-                    for dynamic = 1:dimd
-                        for slice = 1:dimz
-                            for y = 1:dimy
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for slice = 1:dimZ
+                            for y = 1:dimY
                                 % crds, x, y(spoke), slice, repetitions, flip-anlge, echo-times
-                                traj(1,:,y,slice,dynamic,fa,echo) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*cos((pi/180)*(y-1)*fullAngle/dimy);
-                                traj(2,:,y,slice,dynamic,fa,echo) = (-floor(dimx/2)+0.5:floor(dimx/2)-0.5)*sin((pi/180)*(y-1)*fullAngle/dimy);
+                                traj(1,:,y,slice,dynamic,fa,echo) = (-floor(dimX/2)+0.5:floor(dimX/2)-0.5)*cos((pi/180)*(y-1)*fullAngle/dimY);
+                                traj(2,:,y,slice,dynamic,fa,echo) = (-floor(dimX/2)+0.5:floor(dimX/2)-0.5)*sin((pi/180)*(y-1)*fullAngle/dimY);
                                 traj(3,:,y,slice,dynamic,fa,echo) = 0;
                             end
                         end

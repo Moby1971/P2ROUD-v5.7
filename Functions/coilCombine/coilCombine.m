@@ -47,4 +47,5 @@ im2 = permute(im2,[1 2 3 5 4]);
 
     end
 
-end % coilCombine
+
+    end % coilCombine

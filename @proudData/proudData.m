@@ -4083,7 +4083,7 @@ classdef proudData
                         kTraj = kTrajCalib;
 
                         % Initial image
-                        imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTrajCalib,dataCalib);
+                        imCalib = bart(app,['nufft -i -l 0.01 ',cSize,' -t'],kTrajCalib,dataCalib);
 
                         % Initialization
                         iteration = 0;
@@ -4115,7 +4115,7 @@ classdef proudData
 
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
-                            dataCalib = bart(app,'bart nufft -l 0.05',kTraj,kNew);
+                            dataCalib = bart(app,'nufft -l 0.05',kTraj,kNew);
                             kNew  = reshape(dataCalib,[M2-M1+1 size(kTrajCalib,3) 1]);
 
                             % Partial derivatives
@@ -4148,7 +4148,7 @@ classdef proudData
                             kTraj = obj.trajInterpolation(kTrajCalib,dTotal);
 
                             % The new image with k-space updated for gradient delays
-                            imCalib = bart(app,['bart nufft -i -l 0.05 ',cSize,' -t'],kTraj,reshape(spoke,[1 M2-M1+1 size(kTrajCalib,3) 1]));
+                            imCalib = bart(app,['nufft -i -l 0.05 ',cSize,' -t'],kTraj,reshape(spoke,[1 M2-M1+1 size(kTrajCalib,3) 1]));
 
                             % Show image
                             im = squeeze(abs(imCalib(:,:)));
@@ -4902,7 +4902,7 @@ classdef proudData
 
                 % Initial image
                 dataCalib = dataCalib(:,:,ze);
-                imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTrajCalib,dataCalib);
+                imCalib = bart(app,['nufft -i -l 0.01 ',cSize,' -t'],kTrajCalib,dataCalib);
 
                 % Initialization
                 iteration = 0;
@@ -4936,7 +4936,7 @@ classdef proudData
 
                     % NUFFT to get updated k-space data
                     kNew = proudData.ifft3Dmri(xNew);
-                    dataCalib = bart(app,'bart nufft',kTraj,kNew);
+                    dataCalib = bart(app,'nufft',kTraj,kNew);
                     kNew  = reshape(dataCalib,[M size(kTrajCalib,3) dimc]);
 
                     % Partial derivatives
@@ -4967,7 +4967,7 @@ classdef proudData
                     kTraj = proudData.trajInterpolation(kTrajCalib,dTotal);
 
                     % The new image with k-space updated for gradient delays
-                    imCalib = bart(app,['bart nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M size(kTrajCalib,3) dimc]));
+                    imCalib = bart(app,['nufft -i -l 0.01 ',cSize,' -t'],kTraj,reshape(y,[1 M size(kTrajCalib,3) dimc]));
 
                     % Show image
                     im = squeeze(abs(imCalib(:,:,round(calibSize(3)/2),1)));
@@ -6668,15 +6668,15 @@ classdef proudData
             repZ = permute(repX,[3 1 2]);
 
             tmp = xNewFFT.*repX;
-            tmpCalib = bart(app,'bart nufft',kTraj,reshape(tmp,[calibSize nCoils]));
+            tmpCalib = bart(app,'nufft',kTraj,reshape(tmp,[calibSize nCoils]));
             dydkx = reshape(tmpCalib,[size(kx) nCoils]);
 
             tmp = xNewFFT.*repY;
-            tmpCalib = bart(app,'bart nufft',kTraj,reshape(tmp,[calibSize nCoils]));
+            tmpCalib = bart(app,'nufft',kTraj,reshape(tmp,[calibSize nCoils]));
             dydky = reshape(tmpCalib,[size(kx) nCoils]);
 
             tmp = xNewFFT.*repZ;
-            tmpCalib = bart(app,'bart nufft',kTraj,reshape(tmp,[calibSize nCoils]));
+            tmpCalib = bart(app,'nufft',kTraj,reshape(tmp,[calibSize nCoils]));
             dydkz = reshape(tmpCalib,[size(kx) nCoils]);
 
             dydtx = dydkx.*repmat(dkx,[1 1 1 nCoils]);
@@ -6709,11 +6709,11 @@ classdef proudData
             dky(2:end,:) = ky(2:end,:)- ky(1:end-1,:);
 
             tmp =(1j*proudData.ifft2Dmri(Xnew).*repmat([0:(calibSize(1)/2-1), 0, -calibSize(1)/2+1:-1]'/calibSize(1),[1 calibSize(2) nCoils]));
-            tmpCalib = bart(app,'bart nufft',kTraj,reshape(tmp,[calibSize 1 nCoils]));
+            tmpCalib = bart(app,'nufft',kTraj,reshape(tmp,[calibSize 1 nCoils]));
             dydkx = reshape(tmpCalib,[size(kx) nCoils]);
 
             tmp = (1j*proudData.ifft2Dmri(Xnew).*repmat([0:(calibSize(1)/2-1), 0, -calibSize(1)/2+1:-1]/calibSize(1),[calibSize(1) 1 nCoils]));
-            tmpCalib = bart(app,'bart nufft',kTraj,reshape(tmp,[calibSize 1 nCoils]));
+            tmpCalib = bart(app,'nufft',kTraj,reshape(tmp,[calibSize 1 nCoils]));
             dydky = reshape(tmpCalib,[size(kx) nCoils]);
 
             dydtx = dydkx.*repmat(dkx,[1 1 nCoils]);

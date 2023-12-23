@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % Nov 2023
+    % Dec 2023
     %
 
     properties
@@ -277,7 +277,7 @@ classdef proudData
     % app.KMatrixViewField3.Value
     % app.WVxyzEditField.Value
     % app.TVxyzEditField.Value
-    % app.LRxyzEditField.Value
+    % app.LLRxyzEditField.Value
     % app.TVtimeEditField.Value
     % app.CSRecoCheckBox.Value
     % app.AutoSensitivityCheckBox.Value
@@ -2655,7 +2655,7 @@ classdef proudData
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
             TVxy = app.TVxyzEditField.Value;
-            LR = app.LRxyzEditField.Value;
+            LR = app.LLRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
 
             % Input k-space dimensions
@@ -3192,7 +3192,7 @@ classdef proudData
             % CS regularization parameters
             LambdaWavelet = app.WVxyzEditField.Value;
             TVxyz = app.TVxyzEditField.Value;
-            LR = app.LRxyzEditField.Value;
+            LR = app.LLRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
 
             % Dimensions = [X Y slices dynamics, flipangle , echo, slab]
@@ -3808,7 +3808,7 @@ classdef proudData
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
             TVxyz = app.TVxyzEditField.Value;
-            LR = app.LRxyzEditField.Value;
+            LR = app.LLRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
          
             % Dimensions
@@ -4111,8 +4111,7 @@ classdef proudData
                             rank(rank>prod(kSize)) = prod(kSize);
                             xNew = obj.lowRankThresh2D(xOld,kSize,rank);
                             rank = rank+0.05;
-                            % app.TextMessage(strcat('Rank :',{' '},num2str(rank)));
-
+                     
                             % NUFFT to get updated k-space data
                             kNew = obj.ifft2Dmri(xNew);
                             dataCalib = bart(app,'nufft -l 0.05',kTraj,kNew);
@@ -4673,7 +4672,7 @@ classdef proudData
             % CS regularization parameters
             LW = app.WVxyzEditField.Value;
             TVxyz = app.TVxyzEditField.Value;
-            LR = app.LRxyzEditField.Value;
+            LR = app.LLRxyzEditField.Value;
             TVd = app.TVtimeEditField.Value;
             dimc = obj.nrCoils;
             TVtype = 'T'; % Use total variation, instead of TGV
@@ -5951,7 +5950,7 @@ classdef proudData
                 "\nRECONSTRUCTION PARAMETERS\n\n", ...
                 "Wavelet = ",num2str(app.WVxyzEditField.Value), "\n", ...
                 "TVxyz = ",num2str(app.TVxyzEditField.Value), "\n", ...
-                "LRxyz = ",num2str(app.LRxyzEditField.Value), "\n", ...
+                "LLRxyz = ",num2str(app.LLRxyzEditField.Value), "\n", ...
                 "TVtime = ",num2str(app.TVtimeEditField.Value), "\n", ...
                 "CSreco = ",num2str(app.CSRecoCheckBox.Value), "\n\n" ...
                 );

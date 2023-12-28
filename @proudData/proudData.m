@@ -1109,9 +1109,9 @@ classdef proudData
                     % Rotate the vectors according to the angle values
                     % Add a tiny angle to make the chance of hitting 45 degree angles for which orientation is indetermined very unlikely
                     tinyAngle = 0.00001;
-                    obj.LRvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.LRvec;
-                    obj.APvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.APvec;
-                    obj.HFvec = rotz(obj.SQLangleZ+tinyAngle)*roty(obj.SQLangleY+tinyAngle)*rotx(obj.SQLangleX+tinyAngle)*obj.HFvec;
+                    obj.LRvec = rotz(obj.SQLangleZ+tinyAngle,'deg')*roty(obj.SQLangleY+tinyAngle,'deg')*rotx(obj.SQLangleX+tinyAngle,'deg')*obj.LRvec;
+                    obj.APvec = rotz(obj.SQLangleZ+tinyAngle,'deg')*roty(obj.SQLangleY+tinyAngle,'deg')*rotx(obj.SQLangleX+tinyAngle,'deg')*obj.APvec;
+ 
 
                     % Determine the orientation combination
                     % This is done by determining the main direction of the vectors

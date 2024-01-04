@@ -1899,6 +1899,9 @@ classdef proudData
             version = regexp(obj.PPL,'\d*','Match');
             version = str2num(cell2mat(version(end)));
             crit1 = version > 634;
+            if version==606
+                crit1 = 1;
+            end
 
             % FLASH yes or no ?
             crit2 = contains(obj.PPL,"flash");

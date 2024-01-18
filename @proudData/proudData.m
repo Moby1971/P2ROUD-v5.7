@@ -1906,7 +1906,10 @@ classdef proudData
             % FLASH yes or no ?
             crit2 = contains(obj.PPL,"flash");
 
-            if crit1 && crit2
+            % K-space trajectory from table
+            crit3 = contains(app.TrajectoryViewField.Value,"mul_kspace_traj");
+
+            if crit1 && crit2 && ~crit3
 
                 [dimX, dimY, dimZ, dimD, dimF, dimE] = size(obj.rawKspace{1});
 

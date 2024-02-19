@@ -1,8 +1,11 @@
 function folderName = exportDicomDCM(app, dcmdir)
 
 % ---------------------------------
-% ---- Dicom export of images -----
-% ---------------------------------
+% Dicom export of images 
+% Gustav Strijkers
+% Feb 2024
+%
+% ---------------------------------------------------------------
 
 
 % Proud data parameters object
@@ -24,6 +27,7 @@ dimz = size(image,3);
 dimd = size(image,4);
 NFA = size(image,5);
 NE = size(image,6);
+seriesInstanceID = dicomuid;
 
 % reading in the DICOM header information
 listing = dir(fullfile(dcmdir, '*.dcm'));
@@ -48,13 +52,13 @@ fileCounter = 0;
 app.ExportProgressGauge.Value = 0;
 totalNumberofImages = dimd*NFA*NE*dimz;
 
-for i=1:dimd % loop over all repetitions
+for i=1:dimd                % loop over all repetitions
 
-    for j=1:NFA      % loop over all flip angles
+    for j=1:NFA             % loop over all flip angles
 
-        for k=1:NE      % loop over all echo times
+        for k=1:NE          % loop over all echo times
 
-            for z=1:dimz        % loop over all slices
+            for z=1:dimz    % loop over all slices
 
                 % Counter
                 fileCounter = fileCounter + 1;
@@ -291,12 +295,12 @@ end
         dcmHead.InversionTime = 0;
         dcmHead.ImagedNucleus = '1H';
         dcmHead.MagneticFieldStrength = 7;
-        dcmHead.TriggerTime = (k-1)*frametime;    % frame time (ms)
+        dcmHead.TriggerTime = (k-1)*frametime;                      % frame time (ms)
         dcmHead.AcquisitionMatrix = uint16([dimx 0 0 dimy])';
         dcmHead.AcquisitionDeviceProcessingDescription = '';
         dcmHead.AcquisitionDuration = obj.acqdur;
-        dcmHead.InstanceNumber = fileCounter;          % instance number
-        dcmHead.TemporalPositionIdentifier = k;     % frame number
+        dcmHead.InstanceNumber = fileCounter;                       % instance number
+        dcmHead.TemporalPositionIdentifier = k;                     % frame number
         dcmHead.NumberOfTemporalPositions = dimd;
         dcmHead.ImagesInAcquisition = dimd*dimz;
         dcmHead.TemporalPositionIndex = k;
@@ -314,15 +318,20 @@ end
         dcmHead.NumberOfSlices = dimz;
 
         dcmHead.SliceThickness = obj.SLICE_THICKNESS;
-        dcmHead.EchoTime = obj.TE*k;                 % ECHO TIME
+        dcmHead.EchoTime = obj.TE*k;                                                    % ECHO TIME
         dcmHead.SpacingBetweenSlices = obj.SLICE_SEPARATION/obj.SLICE_INTERLEAVE;
         dcmHead.EchoTrainLength = obj.NO_ECHOES;
-        dcmHead.FlipAngle = obj.flipAngleArray(j);           % FLIP ANGLES
+        dcmHead.FlipAngle = obj.flipAngleArray(j);                                      % FLIP ANGLES
 
         if isfield(dcmHead, 'SliceLocation')
             startslice = dcmHead.SliceLocation;
             dcmHead.SliceLocation = startslice+(z-1)*(obj.SLICE_SEPARATION/obj.SLICE_INTERLEAVE);
         end
+
+        dcmHead.SeriesInstanceUID = seriesInstanceID;
+        dcmHead.SequenceVariant = 'NONE';
+        dcmHead.ScanOptions = 'CG';
+        dcmHead.MRAcquisitionType = '2D';
 
         dicomHeader = dcmHead;
 

@@ -4,7 +4,7 @@ classdef proudData
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl
-    % Dec 2023
+    % Feb 2024
     %
 
     properties
@@ -2731,11 +2731,11 @@ classdef proudData
                     % ESPIRiT reconstruction
                     TextMessage(app,'ESPIRiT reconstruction ...');
 
-                    % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
+                    % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic  ecalib -d1 -S -I -W -t0.05 -m2     'ecalib -d1 -S -I -a -m1'
                     sensitivities = zeros(1,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,dimZ);
                     for slice = 1:dimZ
                         app.TextMessage(strcat("Ecalib coil sensitivity estimation, slice = ",num2str(slice)," ..."));
-                        sensitivities(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice) = bart(app,'ecalib -d1 -S -I -a -m1', kSpacePics(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice));
+                        sensitivities(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice) = bart(app,'ecalib -d1 -S -I -W -t0.05 -m1', kSpacePics(1,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,slice));
                     end
 
                 else
@@ -2805,7 +2805,9 @@ classdef proudData
                     while (fa < dimF) && ~app.stopReco_flag
                         fa = fa + 1;
 
-                        app.TextMessage(strcat("Reconstructing, echo = ",num2str(echo),", flip-angle = ",num2str(fa)," ..."));
+                        app.TextMessage("-------------------------------------------");
+                        app.TextMessage(strcat("Reconstructing, echo = ",num2str(echo),", flip-angle = ",num2str(fa)));
+                        app.TextMessage("-------------------------------------------");
 
                         % Bart reco
                         k = kSpacePics(1,:,:,:,1,echo,fa,1,1,1,:,1,1,:);
@@ -3277,7 +3279,7 @@ classdef proudData
                     % Calculate coil sensitivity maps with ecalib bart function, per slice, per dynamic
                     app.TextMessage("Ecalib coil sensitivity estimation ...");
                     sensitivities = zeros(ndimZ,ndimY,ndimX,dimC,1,1,1,1,1,1,ndimD,1,1,1);
-                    sensitivities(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1) = bart(app,'ecalib -d1 -S -I -a -m1', kSpacePics(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1));
+                    sensitivities(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1) = bart(app,'ecalib -d1 -S -I -W -t0.05 -m1', kSpacePics(:,:,:,logical(obj.coilActive_flag),1,1,1,1,1,1,:,1,1,1));
 
                 else
 
@@ -4261,7 +4263,7 @@ classdef proudData
                         end
 
                         % Calculate the senstivity maps
-                        sense = bart(app,'ecalib -d2 -S -I -a -m1', kSpaceZeroFilled);
+                        sense = bart(app,'ecalib -d1 -S -I -W -t0.05 -m1', kSpaceZeroFilled);
 
                     catch ME
                         
@@ -5068,7 +5070,7 @@ classdef proudData
                         kSpaceZeroFilled(:,:,:,coil) = bart(app,['resize -c 0 ',num2str(dimT),' 1 ',num2str(dimT),' 2 ',num2str(dimT)], lowResKspace);
                     end
 
-                    sense = bart(app,'ecalib -d1 -S -I -a -m1', kSpaceZeroFilled);
+                    sense = bart(app,'ecalib -d1 -S -I -W -t0.05 -m1', kSpaceZeroFilled);
 
                 catch ME
 

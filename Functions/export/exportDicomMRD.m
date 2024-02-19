@@ -1,16 +1,17 @@
 function folderName = exportDicomMRD(app, tag)
 
-
-
-% -----------------------------------
-% ----- DICOM export of images ------
-% -----------------------------------
+% ---------------------------------
+% Dicom export of images 
+% Gustav Strijkers
+% Feb 2024
+%
+% ---------------------------------------------------------------
 
 
 % Proud data parameters object
 obj = app.pd;
 
-directory = app.dicomExportPath;
+directory = strcat(app.dicomExportPath,filesep,"DICOM",filesep);
 image = obj.images;
 
 % Create new directory
@@ -36,6 +37,7 @@ end
 % Export the dicom images
 dcmid = dicomuid;   % unique identifier
 dcmid = dcmid(1:50);
+seriesInstanceID = dicomuid;
 
 fileCounter = 0;
 app.ExportProgressGauge.Value = 0;
@@ -46,7 +48,7 @@ for i = 1:NR      % loop over all repetitions
     for j = 1:NFA     % loop over all flip angles
 
         for k = 1:NE      % loop over all echo times
-
+        
             for z = 1:dimz        % loop over all slices
 
                 % Counter
@@ -227,8 +229,7 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.ReferringPhysicianName.NamePrefix = '';
         dcmHead.ReferringPhysicianName.NameSuffix = '';
         dcmHead.StationName = 'MRI Scanner';
-        dcmHead.StudyDescription = 'XD-data';
-        dcmHead.SeriesDescription = '';
+        dcmHead.StudyDescription = 'PROUD-data';
         dcmHead.InstitutionalDepartmentName = 'Amsterdam UMC preclinical MRI';
         dcmHead.PhysicianOfRecord.FamilyName = 'Amsterdam UMC preclinical MRI';
         dcmHead.PhysicianOfRecord.GivenName = '';
@@ -317,7 +318,6 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.FieldOfViewRotation = [];
         dcmHead.AcquisitionDuration = acq_dur;
         dcmHead.StudyInstanceUID = dcmid(1:18);
-        dcmHead.SeriesInstanceUID = [dcmid(1:18),'.',num2str(obj.filename)];
         dcmHead.StudyID = '01';
         dcmHead.SeriesNumber = obj.filename;
         dcmHead.AcquisitionNumber = 1;
@@ -350,9 +350,14 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.NumberOfSlices = obj.NO_SLICES_DCM;
         dcmHead.CardiacNumberOfImages = 1;
         dcmHead.MRAcquisitionType = convertStringsToChars(obj.dataType);
-        dcmHead.ScanOptions = 'CG';
         dcmHead.BodyPartExamined = '';
 
+        dcmHead.SeriesDescription = app.MRDfileViewField.Value;
+        dcmHead.SeriesInstanceUID = seriesInstanceID;
+        dcmHead.SequenceVariant = 'NONE';
+        dcmHead.ScanOptions = 'CG';
+        dcmHead.ProtocolName = convertStringsToChars(strcat("TR",num2str(dcmHead.RepetitionTime),"_TE",num2str(dcmHead.EchoTime)));
+ 
         dicomHeader = dcmHead;
 
     end % Generate dicom header
@@ -418,8 +423,7 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.ReferringPhysicianName.NamePrefix = '';
         dcmHead.ReferringPhysicianName.NameSuffix = '';
         dcmHead.StationName = 'MRI Scanner';
-        dcmHead.StudyDescription = 'XD-data';
-        dcmHead.SeriesDescription = '';
+        dcmHead.StudyDescription = 'PROUD-data';
         dcmHead.InstitutionalDepartmentName = 'Amsterdam UMC preclinical MRI';
         dcmHead.PhysicianOfRecord.FamilyName = 'Amsterdam UMC preclinical MRI';
         dcmHead.PhysicianOfRecord.GivenName = '';
@@ -508,7 +512,6 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.FieldOfViewRotation = [];
         dcmHead.AcquisitionDuration = acq_dur;
         dcmHead.StudyInstanceUID = dcmid(1:18);
-        dcmHead.SeriesInstanceUID = [dcmid(1:18),'.',num2str(obj.filename)];
         dcmHead.StudyID = '01';
         dcmHead.SeriesNumber = obj.filename;
         dcmHead.AcquisitionNumber = 1;
@@ -541,9 +544,14 @@ app.ExportProgressGauge.Value = 100;
         dcmHead.NumberOfSlices = obj.NO_SLICES_DCM;
         dcmHead.CardiacNumberOfImages = 1;
         dcmHead.MRAcquisitionType = convertStringsToChars(obj.dataType);
-        dcmHead.ScanOptions = 'CG';
         dcmHead.BodyPartExamined = '';
 
+        dcmHead.SeriesDescription = app.MRDfileViewField.Value;
+        dcmHead.SeriesInstanceUID = seriesInstanceID;
+        dcmHead.SequenceVariant = 'NONE';
+        dcmHead.ScanOptions = 'CG';
+        dcmHead.ProtocolName = convertStringsToChars(strcat("TR",num2str(dcmHead.RepetitionTime),"_TE",num2str(dcmHead.EchoTime)));
+ 
         dicomHeader = dcmHead;
 
     end % Generate dicom header flow

@@ -1,6 +1,6 @@
 classdef proudData
 
-    % Data and parameter class for P2ROUD app
+    % Data and parameter class for P2ROUD app 
     %
     % Gustav Strijkers
     % g.j.strijkers@amsterdamumc.nl

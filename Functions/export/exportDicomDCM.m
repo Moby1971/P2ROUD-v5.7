@@ -39,7 +39,7 @@ app.TextMessage(strcat('Reading DICOM info from',{' '},dcmFilename));
 ready = false;
 cnt = 1;
 while ~ready
-    folderName = strcat(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'P',num2str(dimd),filesep,num2str(cnt),filesep);
+    folderName = strcat(directory,filesep,"DICOM",filesep,num2str(baseHeader.SeriesNumber),'P',filesep,num2str(cnt),filesep);
     if ~exist(folderName, 'dir')
         mkdir(folderName);
         ready = true;

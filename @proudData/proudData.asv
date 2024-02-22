@@ -5922,11 +5922,6 @@ classdef proudData
         % Export the reconstruction settings
         function obj = ExportRecoParametersFcn(obj, app, exportdir)
 
-            sense = num2str(obj.coilSensitivities);
-            for i = 1:10
-                sense = strrep(sense,"  "," ");
-            end
-
             pars = strcat(...
                 "------------------------- \n\n", ...
                 "P2ROUD ", app.appVersion,"\n\n", ...
@@ -5964,13 +5959,7 @@ classdef proudData
                 "TVxyz = ",num2str(app.TVxyzEditField.Value), "\n", ...
                 "LLRxyz = ",num2str(app.LLRxyzEditField.Value), "\n", ...
                 "TVtime = ",num2str(app.TVtimeEditField.Value), "\n", ...
-                "CSreco = ",num2str(app.CSRecoCheckBox.Value), "\n", ...
-                "denoise = ",num2str(app.DeNoiseCheckBox.Value), "\n", ...
-                "denoise window = ",num2str(app.DeNoiseWindowEditField.Value), "\n", ...
-                "dering = ",num2str(app.DeRingCheckBox.Value), "\n", ...
-                "auto coil sensitivity = ", num2str(app.AutoSensitivityCheckBox.Value), "\n", ...
-                "active coils = ",num2str(obj.coilActive_flag), "\n", ...
-                "coil sensitivities = ",sense, "\n\n" ...
+                "CSreco = ",num2str(app.CSRecoCheckBox.Value), "\n\n" ...
                 );
 
             if strcmp(obj.dataType,'2Dradial')
@@ -6046,7 +6035,7 @@ classdef proudData
             end
 
             % Textmessage
-            app.TextMessage(sprintf('Image shift ΔX=%.2f, ΔY=%.2f pixels, ΔZ=%.2f pixels ...',obj.xShift(1),obj.yShift(1),obj.zShift(1)));
+            app.TextMessage(sprintf('Image shift ΔX = %.2f, ΔY = %.2f pixels, ΔZ = %.2f pixels ...',obj.xShift(1),obj.yShift(1),obj.zShift(1)));
 
         end % get3DimageShift
 
@@ -6111,50 +6100,38 @@ classdef proudData
 
             end
 
+            %
 
-            % Apply the shift if needed
-            try
+            % Retrieve the in-plane image shifts
+            obj = obj.get3DimageShift(app, obj.images);
 
-                if shiftImages
+            [dimX,~,dimZ,dimD,dimF,dimE] = size(obj.images);
 
-                    % Retrieve the in-plane image shifts
-                    obj = obj.get3DimageShift(app, obj.images);
-
-                    [dimX,~,dimZ,dimD,dimF,dimE] = size(obj.images);
-
-                    % Apply the shift on sub-pixel level to the complex images
-                    for echo = 1:dimE
-                        for fa = 1:dimF
-                            for dynamic = 1:dimD
-                                for slice = 1:dimZ
-                                    obj.complexImages(:,:,slice,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,fa,echo)),obj.yShift(1),obj.xShift(1));
-                                end
-                            end
+            % Apply the shift on sub-pixel level to the complex images
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for slice = 1:dimZ
+                            obj.complexImages(:,:,slice,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(:,:,slice,dynamic,fa,echo)),obj.yShift(1),obj.xShift(1));
                         end
                     end
-
-                    for echo = 1:dimE
-                        for fa = 1:dimF
-                            for dynamic = 1:dimD
-                                for x = 1:dimX
-                                    obj.complexImages(x,:,:,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(x,:,:,dynamic,fa,echo)),obj.zShift(1),0);
-                                end
-                            end
-                        end
-                    end
-
-                    % Calculate mangitude and phase images
-                    obj.images = abs(obj.complexImages);
-                    obj.phaseImages = angle(obj.complexImages);
-                    obj.phaseImagesOrig = angle(obj.complexImages);
-
                 end
-
-            catch ME
-
-                app.TextMessage(ME.message);
-
             end
+
+            for echo = 1:dimE
+                for fa = 1:dimF
+                    for dynamic = 1:dimD
+                        for x = 1:dimX
+                            obj.complexImages(x,:,:,dynamic,fa,echo) = obj.image2Dshift(squeeze(obj.complexImages(x,:,:,dynamic,fa,echo)),obj.zShift(1),0);
+                        end
+                    end
+                end
+            end
+
+            % Calculate mangitude and phase images
+            obj.images = abs(obj.complexImages);
+            obj.phaseImages = angle(obj.complexImages);
+            obj.phaseImagesOrig = angle(obj.complexImages);
 
         end % shiftImages3D
 

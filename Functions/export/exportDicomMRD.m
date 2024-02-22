@@ -18,7 +18,7 @@ image = obj.images;
 ready = false;
 cnt = 1;
 while ~ready
-    folderName = strcat(directory,filesep,tag,'P',filesep,filesep,num2str(cnt),filesep);
+    folderName = strcat(directory,filesep,tag,'P',filesep,num2str(cnt),filesep);
     if ~exist(folderName, 'dir')
         mkdir(folderName);
         ready = true;

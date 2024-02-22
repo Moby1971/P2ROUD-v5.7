@@ -14,7 +14,7 @@ gifImages = obj.images;
 ready = false;
 cnt = 1;
 while ~ready
-    folderName = strcat(app.gifExportPath,filesep,"GIF",filesep,"P2ROUD_GIFS_",app.tag,filesep,num2str(cnt),filesep);
+    folderName = strcat(app.gifExportPath,filesep,"GIF",filesep,app.tag,"P",filesep,num2str(cnt),filesep);
     if ~exist(folderName, 'dir')
         mkdir(folderName);
         ready = true;
